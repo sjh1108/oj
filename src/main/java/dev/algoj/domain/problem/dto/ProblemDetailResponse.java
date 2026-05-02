@@ -1,0 +1,47 @@
+package dev.algoj.domain.problem.dto;
+
+import dev.algoj.domain.problem.entity.Problem;
+import dev.algoj.domain.problem.entity.TestCase;
+
+import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.List;
+
+public record ProblemDetailResponse(
+        Long id,
+        String title,
+        String description,
+        String inputDescription,
+        String outputDescription,
+        Integer timeLimit,
+        Integer memoryLimit,
+        Problem.Difficulty difficulty,
+        String authorUsername,
+        Boolean isPublic,
+        List<TestCaseResponse> sampleTestCases,
+        LocalDateTime createdAt,
+        LocalDateTime updatedAt
+) {
+    public static ProblemDetailResponse from(Problem p) {
+        List<TestCaseResponse> samples = p.getTestCases().stream()
+                .filter(TestCase::getIsSample)
+                .sorted(Comparator.comparing(TestCase::getOrderIndex))
+                .map(TestCaseResponse::from)
+                .toList();
+        return new ProblemDetailResponse(
+                p.getId(),
+                p.getTitle(),
+                p.getDescription(),
+                p.getInputDescription(),
+                p.getOutputDescription(),
+                p.getTimeLimit(),
+                p.getMemoryLimit(),
+                p.getDifficulty(),
+                p.getAuthor() != null ? p.getAuthor().getUsername() : null,
+                p.getIsPublic(),
+                samples,
+                p.getCreatedAt(),
+                p.getUpdatedAt()
+        );
+    }
+}

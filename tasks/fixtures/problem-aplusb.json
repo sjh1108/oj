@@ -1,0 +1,15 @@
+{
+  "title": "A+B",
+  "description": "Read two integers A and B, output A+B.",
+  "inputDescription": "One line: A B (space-separated)",
+  "outputDescription": "Single integer A+B",
+  "timeLimit": 1000,
+  "memoryLimit": 131072,
+  "difficulty": "BRONZE",
+  "isPublic": true,
+  "testCases": [
+    {"input": "1 2", "expectedOutput": "3", "orderIndex": 1, "isSample": true},
+    {"input": "5 10", "expectedOutput": "15", "orderIndex": 2, "isSample": true},
+    {"input": "100 200", "expectedOutput": "300", "orderIndex": 3, "isSample": false}
+  ]
+}
