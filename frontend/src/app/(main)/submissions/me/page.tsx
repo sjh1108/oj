@@ -7,13 +7,18 @@ import { useState } from "react";
 import { submissionsApi } from "@/lib/submissions-api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, isPending } from "@/components/status-badge";
 
 export default function MySubmissionsPage() {
   const [page, setPage] = useState(0);
   const list = useQuery({
     queryKey: ["my-submissions", page],
     queryFn: () => submissionsApi.me(page, 20),
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      if (!data) return false;
+      return data.content.some(isPending) ? 1000 : false;
+    },
   });
 
   return (
@@ -51,7 +56,11 @@ export default function MySubmissionsPage() {
                     {s.runtime}ms / {s.memory}KB
                   </span>
                 )}
-                <StatusBadge status={s.status} />
+                <StatusBadge
+                  status={s.status}
+                  passed={s.passedTestCases}
+                  total={s.totalTestCases}
+                />
               </div>
             </Link>
           ))}

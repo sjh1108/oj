@@ -385,6 +385,60 @@
 - [x] `/submissions/me`: 본인 제출 목록 + StatusBadge (AC=초록, WA=빨강, TLE=주황, CE=노랑)
 - [x] `/submissions/[id]`: 메타 카드 4개 + errorMessage (있을 때) + 읽기전용 Monaco
 
+# Phase 4 추가 (2026-05-02) — 비동기 채점 + 풀이 공유 + 채점 현황
+
+## 결정사항 (사용자 확정)
+- **풀이 공유 권한**: 본인이 해당 문제 AC + ADMIN. 제출자가 풀이 공개/비공개 토글 가능 (기본 공개).
+- **진행률 표시**: `passedTestCases / totalTestCases` 컬럼 추가, 채점 매 TC 후 update.
+- **비동기 채점**: Spring `@Async` + ThreadPoolTaskExecutor (MQ 없이). 제출 시 PENDING으로 즉시 반환, 백그라운드에서 채점.
+- **폴링**: 채점 현황/제출 상세에서 PENDING/JUDGING 항목 있으면 1초, 그 외 5초.
+- **다크/라이트 토글**: 생략.
+
+## 작업 순서
+
+### G. 백엔드 — 비동기 채점 인프라 ✅
+- [x] `Submission` entity: `passedTestCases`, `totalTestCases`, `isPublic` 컬럼 + 메서드
+- [x] `AsyncConfig` (@EnableAsync + ThreadPoolTaskExecutor 4/8/50, prefix `judge-`)
+- [x] `JudgeAsyncService` — `@Async judge(submissionId)`
+- [x] `SubmissionService.createPending()` + Controller에서 async 호출 (트랜잭션 커밋 후)
+- [x] 채점 루프 — 매 TC 후 `passedTestCases++ + flush`, 종료 시 final status
+- [x] DTO: `SubmissionResponse`에 진행률 + `isPublic`
+
+### H. 백엔드 — 풀이 공유 + 권한 + 신규 API ✅
+- [x] `SubmissionService.detail()` 권한: 본인 / ADMIN / (본인 AC + 대상 isPublic + ACCEPTED)
+- [x] `SubmissionService.listAll()` 전체 목록
+- [x] `SubmissionService.listSolutions()` — 본인 AC or ADMIN, isPublic=true ACCEPTED
+- [x] `PATCH /api/submissions/{id}/visibility`
+- [x] `GET /api/submissions`
+- [x] `GET /api/problems/{id}/solutions`
+- [x] `SubmissionRepository`: `existsByUserIdAndProblemIdAndStatus`, `findAllByProblemIdAndStatusAndIsPublicTrue`
+- [x] ErrorCode: `SOLUTION_LOCKED`(S003, 403)
+
+### I. 프론트 — 채점 현황 페이지 ✅
+- [x] `/submissions` 페이지 (표 형태, 페이지네이션)
+- [x] `refetchInterval` 가변: 1초/5초 (PENDING/JUDGING 있으면 가속)
+- [x] 진행률 표시 — StatusBadge가 `채점 4/10` 형식
+- [x] Header에 "채점 현황" 메뉴 추가
+
+### J. 프론트 — 제출 상세 폴링 + 풀이 공유 ✅
+- [x] 제출 후 `/submissions/{id}` 이동 — 채점 중이면 1초 폴링
+- [x] 제출 상세에 "공개/비공개" 토글 (본인일 때만)
+- [x] 문제 상세 페이지에 "다른 사람 풀이" 섹션 — S003 시 자물쇠 메시지
+- [x] 풀이 클릭 → 제출 상세로 이동 (코드 보기)
+
+### K. 자잘한 마무리 (C 잔여) ✅
+- [x] 문제 목록에 출제자 + 생성일 표시
+- [x] 문제 상세에서 ADMIN이면 수정/삭제 버튼
+- [x] `/admin/problems/[id]/edit` 페이지
+
+### 검증
+- [x] API 직접 — alice 비동기 제출 → 1초 후 ACCEPTED, passed/total 정상
+- [x] alice AC 받은 문제 풀이 200, AC 안 받은 문제 풀이 403 S003
+- [x] 전체 채점 현황 200
+- [ ] **사용자 브라우저 검증**: 제출 → PENDING/JUDGING 시각화, 채점 현황 폴링, 다른 풀이 노출/잠금
+
+---
+
 ### D5. ADMIN 문제 생성 (2026-05-02 완료)
 - [x] `/admin/problems/new`: 메타 폼(제목/설명/입출력 설명/시간·메모리/난이도/공개) + TC 동적 추가/삭제 (useFieldArray)
 - [x] USER 접근 시 toast + `/problems`로 redirect

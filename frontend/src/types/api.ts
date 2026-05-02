@@ -107,12 +107,19 @@ export interface SubmissionResponse {
   status: SubmissionStatus;
   runtime: number | null;
   memory: number | null;
+  passedTestCases: number;
+  totalTestCases: number;
+  isPublic: boolean;
   createdAt: string;
 }
 
 export interface SubmissionDetailResponse extends SubmissionResponse {
   sourceCode: string;
   errorMessage: string | null;
+}
+
+export interface VisibilityRequest {
+  isPublic: boolean;
 }
 
 export interface PageResponse<T> {

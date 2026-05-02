@@ -13,6 +13,9 @@ public record SubmissionResponse(
         Submission.Status status,
         Integer runtime,
         Integer memory,
+        Integer passedTestCases,
+        Integer totalTestCases,
+        Boolean isPublic,
         LocalDateTime createdAt
 ) {
     public static SubmissionResponse from(Submission s) {
@@ -25,6 +28,9 @@ public record SubmissionResponse(
                 s.getStatus(),
                 s.getRuntime(),
                 s.getMemory(),
+                s.getPassedTestCases(),
+                s.getTotalTestCases(),
+                s.getIsPublic(),
                 s.getCreatedAt()
         );
     }

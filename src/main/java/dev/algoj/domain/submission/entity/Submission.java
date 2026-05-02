@@ -48,6 +48,15 @@ public class Submission {
     private String errorMessage;
 
     @Column(nullable = false)
+    private Integer passedTestCases;
+
+    @Column(nullable = false)
+    private Integer totalTestCases;
+
+    @Column(nullable = false)
+    private Boolean isPublic;
+
+    @Column(nullable = false)
     private LocalDateTime createdAt;
 
     @Getter
@@ -76,23 +85,52 @@ public class Submission {
                        Problem problem,
                        String sourceCode,
                        Language language,
-                       Status status) {
+                       Status status,
+                       Integer totalTestCases) {
         this.user = user;
         this.problem = problem;
         this.sourceCode = sourceCode;
         this.language = language;
         this.status = status;
+        this.passedTestCases = 0;
+        this.totalTestCases = totalTestCases != null ? totalTestCases : 0;
+        this.isPublic = true;
+    }
+
+    public void markJudging() {
+        this.status = Status.JUDGING;
+    }
+
+    public void incrementPassed(Integer runtimeMs, Integer memoryKb) {
+        this.passedTestCases++;
+        if (runtimeMs != null) {
+            this.runtime = (this.runtime == null) ? runtimeMs : Math.max(this.runtime, runtimeMs);
+        }
+        if (memoryKb != null) {
+            this.memory = (this.memory == null) ? memoryKb : Math.max(this.memory, memoryKb);
+        }
     }
 
     public void updateResult(Status status, Integer runtime, Integer memory, String errorMessage) {
         this.status = status;
-        this.runtime = runtime;
-        this.memory = memory;
+        if (runtime != null) {
+            this.runtime = (this.runtime == null) ? runtime : Math.max(this.runtime, runtime);
+        }
+        if (memory != null) {
+            this.memory = (this.memory == null) ? memory : Math.max(this.memory, memory);
+        }
         this.errorMessage = errorMessage;
+    }
+
+    public void setVisibility(boolean isPublic) {
+        this.isPublic = isPublic;
     }
 
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
+        if (this.passedTestCases == null) this.passedTestCases = 0;
+        if (this.totalTestCases == null) this.totalTestCases = 0;
+        if (this.isPublic == null) this.isPublic = true;
     }
 }

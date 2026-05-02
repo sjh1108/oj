@@ -3,6 +3,8 @@ package dev.algoj.domain.submission.controller;
 import dev.algoj.domain.submission.dto.SubmissionDetailResponse;
 import dev.algoj.domain.submission.dto.SubmissionResponse;
 import dev.algoj.domain.submission.dto.SubmitRequest;
+import dev.algoj.domain.submission.dto.VisibilityRequest;
+import dev.algoj.domain.submission.service.JudgeAsyncService;
 import dev.algoj.domain.submission.service.SubmissionService;
 import dev.algoj.global.security.UserPrincipal;
 import jakarta.validation.Valid;
@@ -22,13 +24,21 @@ import org.springframework.web.bind.annotation.*;
 public class SubmissionController {
 
     private final SubmissionService submissionService;
+    private final JudgeAsyncService judgeAsyncService;
 
     @PostMapping
-    public ResponseEntity<SubmissionDetailResponse> submit(
+    public ResponseEntity<SubmissionResponse> submit(
             @Valid @RequestBody SubmitRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
-        SubmissionDetailResponse response = submissionService.submit(request, principal);
+        SubmissionResponse response = submissionService.createPending(request, principal);
+        judgeAsyncService.judge(response.id());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @GetMapping
+    public ResponseEntity<Page<SubmissionResponse>> listAll(
+            @PageableDefault(size = 30, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(submissionService.listAll(pageable));
     }
 
     @GetMapping("/me")
@@ -43,5 +53,14 @@ public class SubmissionController {
             @PathVariable Long id,
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(submissionService.detail(id, principal));
+    }
+
+    @PatchMapping("/{id}/visibility")
+    public ResponseEntity<SubmissionResponse> updateVisibility(
+            @PathVariable Long id,
+            @Valid @RequestBody VisibilityRequest body,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(
+                submissionService.updateVisibility(id, body.isPublic(), principal));
     }
 }

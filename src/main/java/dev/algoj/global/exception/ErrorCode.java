@@ -29,7 +29,8 @@ public enum ErrorCode {
 
     // Submission / Judge0
     SUBMISSION_NOT_FOUND(HttpStatus.NOT_FOUND, "S001", "존재하지 않는 제출입니다."),
-    JUDGE0_ERROR(HttpStatus.BAD_GATEWAY, "S002", "채점 서버 호출에 실패했습니다.");
+    JUDGE0_ERROR(HttpStatus.BAD_GATEWAY, "S002", "채점 서버 호출에 실패했습니다."),
+    SOLUTION_LOCKED(HttpStatus.FORBIDDEN, "S003", "해당 문제를 정답 처리한 후에 다른 사람의 풀이를 볼 수 있습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

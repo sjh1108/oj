@@ -24,6 +24,12 @@ export function Header() {
             문제
           </Link>
           <Link
+            href="/submissions"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            채점 현황
+          </Link>
+          <Link
             href="/submissions/me"
             className="text-sm text-muted-foreground hover:text-foreground"
           >

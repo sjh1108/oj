@@ -1,5 +1,9 @@
 import { Badge } from "@/components/ui/badge";
-import type { Difficulty, SubmissionStatus } from "@/types/api";
+import type {
+  Difficulty,
+  SubmissionResponse,
+  SubmissionStatus,
+} from "@/types/api";
 
 const STATUS_LABEL: Record<SubmissionStatus, string> = {
   PENDING: "대기",
@@ -23,12 +27,32 @@ const STATUS_CLASS: Record<SubmissionStatus, string> = {
   SYSTEM_ERROR: "bg-red-500/15 text-red-500 border-red-500/30",
 };
 
-export function StatusBadge({ status }: { status: SubmissionStatus }) {
+export function StatusBadge({
+  status,
+  passed,
+  total,
+}: {
+  status: SubmissionStatus;
+  passed?: number;
+  total?: number;
+}) {
+  const showProgress =
+    (status === "PENDING" || status === "JUDGING") &&
+    total !== undefined &&
+    total > 0;
+  const label = showProgress
+    ? `채점 ${passed ?? 0}/${total}`
+    : STATUS_LABEL[status];
+
   return (
     <Badge variant="outline" className={STATUS_CLASS[status]}>
-      {STATUS_LABEL[status]}
+      {label}
     </Badge>
   );
+}
+
+export function isPending(s: Pick<SubmissionResponse, "status">) {
+  return s.status === "PENDING" || s.status === "JUDGING";
 }
 
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {

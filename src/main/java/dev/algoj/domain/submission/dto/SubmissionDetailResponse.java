@@ -13,6 +13,9 @@ public record SubmissionDetailResponse(
         Submission.Status status,
         Integer runtime,
         Integer memory,
+        Integer passedTestCases,
+        Integer totalTestCases,
+        Boolean isPublic,
         String sourceCode,
         String errorMessage,
         LocalDateTime createdAt
@@ -27,6 +30,9 @@ public record SubmissionDetailResponse(
                 s.getStatus(),
                 s.getRuntime(),
                 s.getMemory(),
+                s.getPassedTestCases(),
+                s.getTotalTestCases(),
+                s.getIsPublic(),
                 s.getSourceCode(),
                 s.getErrorMessage(),
                 s.getCreatedAt()

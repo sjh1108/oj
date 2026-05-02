@@ -1,22 +1,46 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { toast } from "sonner";
 
 import { submissionsApi } from "@/lib/submissions-api";
+import { useAuthStore } from "@/lib/auth-store";
+import { ApiError } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeEditor } from "@/components/code-editor";
-import { StatusBadge } from "@/components/status-badge";
+import { StatusBadge, isPending } from "@/components/status-badge";
 
 export default function SubmissionDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
+  const user = useAuthStore((s) => s.user);
+  const qc = useQueryClient();
 
   const sub = useQuery({
     queryKey: ["submission", id],
     queryFn: () => submissionsApi.detail(id),
     enabled: !Number.isNaN(id),
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      if (!data) return false;
+      return isPending(data) ? 1000 : false;
+    },
+  });
+
+  const visibility = useMutation({
+    mutationFn: (isPublic: boolean) =>
+      submissionsApi.updateVisibility(id, { isPublic }),
+    onSuccess: (updated) => {
+      toast.success(updated.isPublic ? "공개로 변경" : "비공개로 변경");
+      qc.invalidateQueries({ queryKey: ["submission", id] });
+    },
+    onError: (err) => {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("변경 실패");
+    },
   });
 
   if (sub.isLoading) {
@@ -35,13 +59,18 @@ export default function SubmissionDetailPage() {
   }
 
   const s = sub.data;
+  const isOwner = user?.username === s.username;
 
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold">제출 #{s.id}</h1>
-          <StatusBadge status={s.status} />
+          <StatusBadge
+            status={s.status}
+            passed={s.passedTestCases}
+            total={s.totalTestCases}
+          />
         </div>
         <Link
           href={`/problems/${s.problemId}`}
@@ -81,6 +110,28 @@ export default function SubmissionDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {isOwner && (
+        <Card>
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <div className="font-medium">풀이 공개</div>
+              <div className="text-sm text-muted-foreground">
+                공개 시 같은 문제를 푼 다른 사용자가 이 제출의 코드를 볼 수
+                있습니다
+              </div>
+            </div>
+            <Button
+              variant={s.isPublic ? "outline" : "default"}
+              size="sm"
+              onClick={() => visibility.mutate(!s.isPublic)}
+              disabled={visibility.isPending}
+            >
+              {s.isPublic ? "비공개로 전환" : "공개로 전환"}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {s.errorMessage && (
         <Card>

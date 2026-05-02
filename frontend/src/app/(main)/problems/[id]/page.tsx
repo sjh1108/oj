@@ -1,6 +1,7 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -8,10 +9,11 @@ import { toast } from "sonner";
 import { problemsApi } from "@/lib/problems-api";
 import { submissionsApi } from "@/lib/submissions-api";
 import { ApiError } from "@/lib/api";
+import { useAuthStore } from "@/lib/auth-store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeEditor } from "@/components/code-editor";
-import { DifficultyBadge } from "@/components/status-badge";
+import { DifficultyBadge, StatusBadge } from "@/components/status-badge";
 import type { Language } from "@/types/api";
 
 const LANGUAGES: { value: Language; label: string }[] = [
@@ -37,6 +39,9 @@ export default function ProblemDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const qc = useQueryClient();
+  const isAdmin = user?.role === "ADMIN";
 
   const [language, setLanguage] = useState<Language>("PYTHON3");
   const [code, setCode] = useState<string>(STARTER.PYTHON3);
@@ -47,15 +52,35 @@ export default function ProblemDetailPage() {
     enabled: !Number.isNaN(id),
   });
 
+  const solutions = useQuery({
+    queryKey: ["solutions", id],
+    queryFn: () => submissionsApi.solutions(id),
+    enabled: !Number.isNaN(id),
+    retry: false,
+  });
+
   const submit = useMutation({
     mutationFn: submissionsApi.submit,
     onSuccess: (s) => {
-      toast.success(`제출 완료 — ${s.status}`);
+      toast.info("제출 완료, 채점 중...");
       router.push(`/submissions/${s.id}`);
     },
     onError: (err) => {
       if (err instanceof ApiError) toast.error(err.message);
       else toast.error("제출 실패");
+    },
+  });
+
+  const remove = useMutation({
+    mutationFn: () => problemsApi.delete(id),
+    onSuccess: () => {
+      toast.success("문제 삭제 완료");
+      qc.invalidateQueries({ queryKey: ["problems"] });
+      router.push("/problems");
+    },
+    onError: (err) => {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("삭제 실패");
     },
   });
 
@@ -75,20 +100,48 @@ export default function ProblemDetailPage() {
   }
 
   const p = problem.data;
+  const solutionsLocked =
+    solutions.isError &&
+    solutions.error instanceof ApiError &&
+    solutions.error.code === "S003";
 
   return (
-    <main className="max-w-7xl mx-auto p-6">
+    <main className="max-w-7xl mx-auto p-6 space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section className="space-y-4">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold">
-              #{p.id} {p.title}
-            </h1>
-            <DifficultyBadge difficulty={p.difficulty} />
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-semibold">
+                #{p.id} {p.title}
+              </h1>
+              <DifficultyBadge difficulty={p.difficulty} />
+            </div>
+            {isAdmin && (
+              <div className="flex gap-2">
+                <Link
+                  href={`/admin/problems/${p.id}/edit`}
+                  className="text-sm text-muted-foreground hover:text-foreground underline"
+                >
+                  수정
+                </Link>
+                <button
+                  className="text-sm text-destructive hover:underline"
+                  onClick={() => {
+                    if (confirm(`#${p.id} ${p.title} 문제를 삭제할까요?`)) {
+                      remove.mutate();
+                    }
+                  }}
+                  disabled={remove.isPending}
+                >
+                  삭제
+                </button>
+              </div>
+            )}
           </div>
           <div className="text-sm text-muted-foreground">
             시간 제한 {p.timeLimit}ms · 메모리 {p.memoryLimit}KB
             {p.authorUsername && ` · 출제자 ${p.authorUsername}`}
+            {!p.isPublic && " · 비공개"}
           </div>
 
           <Card>
@@ -171,7 +224,7 @@ export default function ProblemDetailPage() {
               }
               disabled={submit.isPending || !code.trim()}
             >
-              {submit.isPending ? "채점 중..." : "제출"}
+              {submit.isPending ? "제출 중..." : "제출"}
             </Button>
           </div>
           <CodeEditor
@@ -182,6 +235,64 @@ export default function ProblemDetailPage() {
           />
         </section>
       </div>
+
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">다른 사람 풀이</h2>
+        {solutionsLocked && (
+          <Card>
+            <CardContent className="p-6 text-center text-muted-foreground text-sm">
+              이 문제를 정답 처리한 후에 다른 사람의 풀이를 볼 수 있습니다.
+            </CardContent>
+          </Card>
+        )}
+        {!solutionsLocked && solutions.isLoading && (
+          <p className="text-muted-foreground text-sm">불러오는 중...</p>
+        )}
+        {!solutionsLocked && solutions.data && solutions.data.empty && (
+          <Card>
+            <CardContent className="p-6 text-center text-muted-foreground text-sm">
+              아직 공개된 풀이가 없습니다
+            </CardContent>
+          </Card>
+        )}
+        {!solutionsLocked && solutions.data && !solutions.data.empty && (
+          <Card className="overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr className="text-left">
+                  <th className="p-3 w-32">사용자</th>
+                  <th className="p-3 w-28">언어</th>
+                  <th className="p-3 w-32">시간/메모리</th>
+                  <th className="p-3 w-32 text-right">상세</th>
+                </tr>
+              </thead>
+              <tbody>
+                {solutions.data.content.map((s) => (
+                  <tr key={s.id} className="border-t hover:bg-muted/40">
+                    <td className="p-3">{s.username}</td>
+                    <td className="p-3 text-xs text-muted-foreground">
+                      {s.language}
+                    </td>
+                    <td className="p-3 text-xs text-muted-foreground">
+                      {s.runtime !== null
+                        ? `${s.runtime}ms / ${s.memory}KB`
+                        : "-"}
+                    </td>
+                    <td className="p-3 text-right">
+                      <Link
+                        href={`/submissions/${s.id}`}
+                        className="text-sm hover:underline"
+                      >
+                        코드 보기
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        )}
+      </section>
     </main>
   );
 }

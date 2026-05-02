@@ -42,16 +42,28 @@ export default function ProblemsPage() {
               href={`/problems/${p.id}`}
               className="flex items-center justify-between p-4 hover:bg-muted/50"
             >
-              <div className="flex items-center gap-3">
-                <span className="text-muted-foreground text-sm w-10">
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-muted-foreground text-sm w-10 shrink-0">
                   #{p.id}
                 </span>
-                <span className="font-medium">{p.title}</span>
+                <span className="font-medium truncate">{p.title}</span>
                 {!p.isPublic && (
-                  <span className="text-xs text-muted-foreground">(비공개)</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    (비공개)
+                  </span>
                 )}
               </div>
-              <DifficultyBadge difficulty={p.difficulty} />
+              <div className="flex items-center gap-3 shrink-0">
+                {p.authorUsername && (
+                  <span className="text-xs text-muted-foreground">
+                    {p.authorUsername}
+                  </span>
+                )}
+                <span className="text-xs text-muted-foreground">
+                  {new Date(p.createdAt).toLocaleDateString("ko-KR")}
+                </span>
+                <DifficultyBadge difficulty={p.difficulty} />
+              </div>
             </Link>
           ))}
         </Card>

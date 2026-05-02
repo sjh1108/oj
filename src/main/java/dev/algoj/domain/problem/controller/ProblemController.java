@@ -5,6 +5,8 @@ import dev.algoj.domain.problem.dto.ProblemDetailResponse;
 import dev.algoj.domain.problem.dto.ProblemListResponse;
 import dev.algoj.domain.problem.dto.UpdateProblemRequest;
 import dev.algoj.domain.problem.service.ProblemService;
+import dev.algoj.domain.submission.dto.SubmissionResponse;
+import dev.algoj.domain.submission.service.SubmissionService;
 import dev.algoj.domain.user.entity.User;
 import dev.algoj.global.security.UserPrincipal;
 import jakarta.validation.Valid;
@@ -25,6 +27,7 @@ import org.springframework.web.bind.annotation.*;
 public class ProblemController {
 
     private final ProblemService problemService;
+    private final SubmissionService submissionService;
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
@@ -64,5 +67,13 @@ public class ProblemController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         problemService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/solutions")
+    public ResponseEntity<Page<SubmissionResponse>> solutions(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserPrincipal principal,
+            @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(submissionService.listSolutions(id, principal, pageable));
     }
 }

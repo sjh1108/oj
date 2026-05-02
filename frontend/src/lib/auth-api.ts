@@ -12,4 +12,5 @@ export const authApi = {
   login: (body: LoginRequest) =>
     api<TokenResponse>("/api/auth/login", { method: "POST", body, auth: false }),
   me: () => api<UserResponse>("/api/users/me"),
+  mySolvedProblems: () => api<number[]>("/api/users/me/solved-problems"),
 };
