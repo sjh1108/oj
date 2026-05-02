@@ -1,5 +1,0 @@
-{
-  "problemId": 8,
-  "language": "PYTHON3",
-  "sourceCode": "a, b = map(int, input().split())\nprint(a + b)\n"
-}

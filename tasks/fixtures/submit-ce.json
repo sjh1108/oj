@@ -1,5 +1,0 @@
-{
-  "problemId": 8,
-  "language": "CPP",
-  "sourceCode": "int main() { this is not valid C++ }\n"
-}

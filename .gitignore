@@ -35,3 +35,12 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### Workflow / local-only ###
+/tasks/
+/.claude/
+
+### env files (only .env.example is committed) ###
+.env
+.env.*
+!.env.example
