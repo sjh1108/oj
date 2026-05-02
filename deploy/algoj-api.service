@@ -1,0 +1,19 @@
+[Unit]
+Description=algoj backend (Spring Boot)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/algoj
+EnvironmentFile=/opt/algoj/.env
+ExecStart=/usr/bin/java -Xms200m -Xmx400m -jar /opt/algoj/algoj.jar
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=algoj-api
+
+[Install]
+WantedBy=multi-user.target
