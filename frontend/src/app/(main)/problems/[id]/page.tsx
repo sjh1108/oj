@@ -13,7 +13,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeEditor } from "@/components/code-editor";
-import { DifficultyBadge, StatusBadge } from "@/components/status-badge";
+import { DifficultyBadge } from "@/components/status-badge";
 import type { Language } from "@/types/api";
 
 const LANGUAGES: { value: Language; label: string }[] = [
