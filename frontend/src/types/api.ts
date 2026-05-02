@@ -1,6 +1,6 @@
 export type Role = "USER" | "ADMIN";
 
-export type Difficulty = "EASY" | "MEDIUM" | "HARD";
+export type Difficulty = "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "DIAMOND";
 
 export type Language = "JAVA" | "PYTHON3" | "CPP" | "C" | "JAVASCRIPT";
 
@@ -25,6 +25,7 @@ export interface UserResponse {
 export interface TokenResponse {
   accessToken: string;
   refreshToken: string;
+  tokenType: string;
   expiresIn: number;
 }
 
@@ -39,10 +40,11 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface TestCaseSummary {
+export interface TestCaseResponse {
   id: number;
   input: string;
   expectedOutput: string;
+  orderIndex: number;
   isSample: boolean;
 }
 
@@ -50,38 +52,44 @@ export interface ProblemListItem {
   id: number;
   title: string;
   difficulty: Difficulty;
+  authorUsername: string | null;
   isPublic: boolean;
+  createdAt: string;
 }
 
 export interface ProblemDetailResponse {
   id: number;
   title: string;
   description: string;
-  inputFormat: string;
-  outputFormat: string;
-  timeLimitMs: number;
-  memoryLimitKb: number;
+  inputDescription: string | null;
+  outputDescription: string | null;
+  timeLimit: number;
+  memoryLimit: number;
   difficulty: Difficulty;
+  authorUsername: string | null;
   isPublic: boolean;
-  sampleTestCases: TestCaseSummary[];
-}
-
-export interface CreateProblemRequest {
-  title: string;
-  description: string;
-  inputFormat: string;
-  outputFormat: string;
-  timeLimitMs: number;
-  memoryLimitKb: number;
-  difficulty: Difficulty;
-  isPublic: boolean;
-  testCases: TestCaseRequest[];
+  sampleTestCases: TestCaseResponse[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TestCaseRequest {
   input: string;
   expectedOutput: string;
+  orderIndex: number;
   isSample: boolean;
+}
+
+export interface CreateProblemRequest {
+  title: string;
+  description: string;
+  inputDescription?: string;
+  outputDescription?: string;
+  timeLimit: number;
+  memoryLimit: number;
+  difficulty: Difficulty;
+  isPublic: boolean;
+  testCases: TestCaseRequest[];
 }
 
 export interface SubmitRequest {
@@ -97,8 +105,8 @@ export interface SubmissionResponse {
   username: string;
   language: Language;
   status: SubmissionStatus;
-  runtimeMs: number | null;
-  memoryKb: number | null;
+  runtime: number | null;
+  memory: number | null;
   createdAt: string;
 }
 

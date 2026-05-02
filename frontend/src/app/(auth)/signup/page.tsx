@@ -24,11 +24,11 @@ import { Label } from "@/components/ui/label";
 const schema = z.object({
   username: z
     .string()
-    .min(3, "3자 이상")
-    .max(20, "20자 이하")
-    .regex(/^[a-zA-Z0-9_]+$/, "영문/숫자/언더스코어만"),
-  email: z.string().email("올바른 이메일 형식이 아닙니다"),
-  password: z.string().min(8, "8자 이상"),
+    .min(3, { error: "3자 이상" })
+    .max(20, { error: "20자 이하" })
+    .regex(/^[a-zA-Z0-9_]+$/, { error: "영문/숫자/언더스코어만" }),
+  email: z.email({ error: "올바른 이메일 형식이 아닙니다" }),
+  password: z.string().min(8, { error: "8자 이상" }),
 });
 
 type FormValues = z.infer<typeof schema>;

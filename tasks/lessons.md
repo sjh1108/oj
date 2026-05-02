@@ -107,3 +107,43 @@
 ### Git Bash + curl `-w "$path = ..."` 인자에서 MSYS 경로 변환
 - `$path=/`인 채로 curl `-w` template에 `$path` 끼우면 MSYS가 leading `/`를 `C:/Program Files/Git/`로 변환 → 출력이 깨짐.
 - 해결: 단일 따옴표로 인용하거나 `MSYS_NO_PATHCONV=1` 설정. 검증 스크립트 작성 시 주의.
+
+### enum / DTO 필드명은 추측하지 말고 항상 백엔드 소스 확인
+- 프론트 types/api.ts 만들 때 백엔드 enum/필드명을 확인 안 하고 통상적인 값으로 추측 → 런타임에 mismatch 발견 시점이 늦어짐.
+- 이번 사고:
+  - `Difficulty`: 백엔드 BRONZE/SILVER/GOLD/PLATINUM/DIAMOND ↔ 프론트 추측 EASY/MEDIUM/HARD → 배지가 빈 채로 표시되다가 admin 문제 생성 시 Jackson 역직렬화 500.
+  - `timeLimit`/`memoryLimit` ↔ 추측 `timeLimitMs`/`memoryLimitKb` → 문제 상세에서 `undefined ms` 표시.
+  - `inputDescription`/`outputDescription` ↔ 추측 `inputFormat`/`outputFormat` → 빈 카드.
+  - `runtime`/`memory` ↔ 추측 `runtimeMs`/`memoryKb` → 제출 상세 시간/메모리 0 표시.
+- 룰: 새 DTO 정의할 때 무조건 해당 record/entity 파일을 먼저 읽고 그대로 옮기기. 추측 금지. 단위(ms/KB)도 필드명에 안 들어 있으면 추가 안 하기 (백엔드 컨벤션 따라가기).
+- 빠른 검증: `curl ... | python -m json.tool`로 실제 응답 키 확인 후 타입 정의.
+
+### Zustand `persist` hydration race — 풀 페이지 새로고침 시 보호 라우트 layout이 잘못 redirect
+- 보호 layout 패턴: `useEffect(() => { if (!accessToken) router.replace("/login"); }, [accessToken])`
+- Zustand persist는 localStorage를 **비동기**로 읽음. 첫 React 마운트 직후엔 store 초기값(`null`) 상태 → useEffect가 그걸 보고 `/login` redirect → 직후 hydrate 완료되지만 이미 navigated.
+- SPA 내부 `<Link>` / `router.push()`로는 layout이 unmount되지 않아 안 보이지만, **URL 직접 타이핑/F5 새로고침 = 풀 페이지 SSR**에서 hydration race가 노출됨. 사용자는 "로그인 멀쩡한데 왜 로그인 페이지로 튕기지?" 혼란.
+- 해결: `useAuthStore.persist.hasHydrated()` + `onFinishHydration`으로 hydration 완료 후에만 토큰 체크. hydration 전엔 `return null` (또는 스켈레톤).
+- 디버깅 단서: localStorage `algoj-auth`는 그대로 남아있는데 페이지는 /login에 있음 → 토큰이 없어서 redirect된 게 아니라 **타이밍** 때문.
+- `@base-ui/react/select` 기반. value/onValueChange API는 맞지만 React 18 + portal 조합에서 onValueChange 콜백이 안 발화하거나 트리거 텍스트가 갱신 안 되는 케이스 관찰됨.
+- 단순 form control(언어 선택 5개 옵션 등)은 native `<select>`로 가는 게 안정적. shadcn 컴포넌트는 진짜로 커스텀 키보드 내비게이션/검색이 필요한 콤보박스에서만 쓸 것.
+
+### shadcn 4.x base-nova `Input`/`Textarea`에 `forwardRef` 누락 → react-hook-form 바인딩 깨짐
+- shadcn CLI가 깐 `src/components/ui/input.tsx`, `textarea.tsx`가 plain function component (`function Input({...}) { return <InputPrimitive .../> }`).
+- React 18에서 function component는 ref를 받을 수 없음 → react-hook-form의 `register()`가 반환하는 ref가 silent하게 drop → input 값이 form state에 바인딩 안 됨.
+- 증상: 사용자가 필드에 무엇을 입력하든 `form.getValues()`에 빈 문자열로 들어가서 zod 검증이 빈 값 기준으로 실패 → 모든 필드에서 `min(N)` 또는 default `"Invalid input"` 메시지 표시. 사용자는 "왜 valid 한 입력에 invalid input이 뜨지?"로 인식.
+- **콘솔 단서**: `Warning: Function components cannot be given refs. Did you mean to use React.forwardRef()? Check the render method of \`SignupPage\`. at Input ...` — 이 경고 보면 즉시 의심할 것.
+- **해결**: shadcn이 깔아둔 모든 form-related primitive(Input/Textarea/Select 트리거/Checkbox 등)를 `React.forwardRef`로 감싸고 ref를 base-ui primitive에 전달.
+- **근본 원인**: 새 shadcn은 React 19 native ref-as-prop 가정 (forwardRef 불필요). React 18 + rhf 조합에선 깨짐. 향후 React 19 업그레이드 시 forwardRef wrapper 제거 가능.
+- v3: `z.string().min(8, "8자 이상")` 두 번째 인자에 그냥 string 가능.
+- v4: 같은 코드가 silent하게 무시되고 default 영어 메시지("Invalid input")가 표시됨. 사용자는 한글 message 안 보이고 영어 generic만 봄.
+- 해결: `{ error: "..." }` 객체 형태로 변경. 또는 `{ message: "..." }`도 호환되지만 `error`가 canonical.
+  - `z.string().min(3, { error: "3자 이상" })`
+  - `z.string().regex(pattern, { error: "..." })`
+  - `z.email({ error: "..." })` (top-level 권장; `z.string().email()`은 deprecated)
+- 혼동 포인트: 폼이 멀쩡히 submit되고 백엔드가 200/400 정상 응답해도, 프론트에서 zod resolver가 일찍 차단하면 사용자 보기엔 "필드별 한글 메시지가 안 떠요"로 인식됨.
+
+### `npm run dev`가 도는 동안 `npm run build` 절대 돌리지 말 것
+- `next build`가 `.next/` 디렉토리를 production 산출물로 덮어쓰면, 같은 디렉토리를 watch 중인 dev 서버의 `static/chunks/*.js`, `static/css/*.css`가 404로 떨어짐.
+- 증상: 페이지는 SSR로 200 응답하지만 JS 자산 404 → React hydration 실패 → form `onSubmit` handler가 안 붙어서 native HTML form submit 발동 → `<form>`(action 없음)이 GET으로 현재 URL에 query string 붙여 제출 → **비밀번호가 URL에 노출됨**.
+- 해결: 빌드 검증은 별도 머신/디렉토리에서 하거나, 검증 끝나면 `rm -rf frontend/.next && npm run dev` 재시작.
+- 예방: 검증 흐름은 `npm run dev` 한 가지로 통일 (TypeScript 에러는 `npx tsc --noEmit`만 돌리면 됨).

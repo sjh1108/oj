@@ -46,9 +46,9 @@ export default function MySubmissionsPage() {
                 <span className="text-xs text-muted-foreground">{s.language}</span>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                {s.runtimeMs !== null && (
+                {s.runtime !== null && (
                   <span className="text-xs text-muted-foreground">
-                    {s.runtimeMs}ms / {s.memoryKb}KB
+                    {s.runtime}ms / {s.memory}KB
                   </span>
                 )}
                 <StatusBadge status={s.status} />

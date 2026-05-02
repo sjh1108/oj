@@ -385,9 +385,11 @@
 - [x] `/submissions/me`: 본인 제출 목록 + StatusBadge (AC=초록, WA=빨강, TLE=주황, CE=노랑)
 - [x] `/submissions/[id]`: 메타 카드 4개 + errorMessage (있을 때) + 읽기전용 Monaco
 
-### D5. (선택) ADMIN 문제 생성 — **다음 세션으로 미룸**
-- [ ] `/admin/problems/new`: 폼 + TC 동적 추가/삭제
-- [ ] role 체크, USER 접근 시 `/problems`로 redirect
+### D5. ADMIN 문제 생성 (2026-05-02 완료)
+- [x] `/admin/problems/new`: 메타 폼(제목/설명/입출력 설명/시간·메모리/난이도/공개) + TC 동적 추가/삭제 (useFieldArray)
+- [x] USER 접근 시 toast + `/problems`로 redirect
+- [x] 생성 성공 → `/problems/{새 id}`로 이동
+- [x] 백엔드 fieldErrors → 필드별 토스트 표시
 
 ### D6. 검증
 - [x] `npm run build` 통과 (9 routes — `/`, `/login`, `/signup`, `/problems`, `/problems/[id]`, `/submissions/me`, `/submissions/[id]`, `/_not-found`, `_error`)

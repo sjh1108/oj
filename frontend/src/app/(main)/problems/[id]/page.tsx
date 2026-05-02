@@ -12,13 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeEditor } from "@/components/code-editor";
 import { DifficultyBadge } from "@/components/status-badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { Language } from "@/types/api";
 
 const LANGUAGES: { value: Language; label: string }[] = [
@@ -94,7 +87,8 @@ export default function ProblemDetailPage() {
             <DifficultyBadge difficulty={p.difficulty} />
           </div>
           <div className="text-sm text-muted-foreground">
-            시간 제한 {p.timeLimitMs}ms · 메모리 {p.memoryLimitKb}KB
+            시간 제한 {p.timeLimit}ms · 메모리 {p.memoryLimit}KB
+            {p.authorUsername && ` · 출제자 ${p.authorUsername}`}
           </div>
 
           <Card>
@@ -106,23 +100,27 @@ export default function ProblemDetailPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">입력</CardTitle>
-            </CardHeader>
-            <CardContent className="whitespace-pre-wrap text-sm">
-              {p.inputFormat}
-            </CardContent>
-          </Card>
+          {p.inputDescription && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">입력</CardTitle>
+              </CardHeader>
+              <CardContent className="whitespace-pre-wrap text-sm">
+                {p.inputDescription}
+              </CardContent>
+            </Card>
+          )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">출력</CardTitle>
-            </CardHeader>
-            <CardContent className="whitespace-pre-wrap text-sm">
-              {p.outputFormat}
-            </CardContent>
-          </Card>
+          {p.outputDescription && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">출력</CardTitle>
+              </CardHeader>
+              <CardContent className="whitespace-pre-wrap text-sm">
+                {p.outputDescription}
+              </CardContent>
+            </Card>
+          )}
 
           {p.sampleTestCases.map((tc, i) => (
             <div key={tc.id} className="grid grid-cols-2 gap-3">
@@ -152,25 +150,21 @@ export default function ProblemDetailPage() {
 
         <section className="space-y-3 lg:sticky lg:top-4 lg:self-start">
           <div className="flex items-center justify-between gap-3">
-            <Select
+            <select
               value={language}
-              onValueChange={(v) => {
-                const lang = v as Language;
+              onChange={(e) => {
+                const lang = e.target.value as Language;
                 setLanguage(lang);
                 setCode(STARTER[lang]);
               }}
+              className="h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {LANGUAGES.map((l) => (
-                  <SelectItem key={l.value} value={l.value}>
-                    {l.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              {LANGUAGES.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
             <Button
               onClick={() =>
                 submit.mutate({ problemId: p.id, language, sourceCode: code })

@@ -32,15 +32,19 @@ export function StatusBadge({ status }: { status: SubmissionStatus }) {
 }
 
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {
-  EASY: "쉬움",
-  MEDIUM: "보통",
-  HARD: "어려움",
+  BRONZE: "브론즈",
+  SILVER: "실버",
+  GOLD: "골드",
+  PLATINUM: "플래티넘",
+  DIAMOND: "다이아",
 };
 
 const DIFFICULTY_CLASS: Record<Difficulty, string> = {
-  EASY: "bg-green-500/15 text-green-500 border-green-500/30",
-  MEDIUM: "bg-yellow-500/15 text-yellow-500 border-yellow-500/30",
-  HARD: "bg-red-500/15 text-red-500 border-red-500/30",
+  BRONZE: "bg-amber-700/15 text-amber-700 border-amber-700/30",
+  SILVER: "bg-slate-400/15 text-slate-400 border-slate-400/30",
+  GOLD: "bg-yellow-500/15 text-yellow-500 border-yellow-500/30",
+  PLATINUM: "bg-emerald-400/15 text-emerald-400 border-emerald-400/30",
+  DIAMOND: "bg-cyan-400/15 text-cyan-400 border-cyan-400/30",
 };
 
 export function DifficultyBadge({ difficulty }: { difficulty: Difficulty }) {

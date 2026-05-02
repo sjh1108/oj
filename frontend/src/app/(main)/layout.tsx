@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
@@ -18,14 +18,23 @@ export default function MainLayout({
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
 
+  const [hydrated, setHydrated] = useState(false);
+
   useEffect(() => {
-    if (!accessToken) router.replace("/login");
-  }, [accessToken, router]);
+    if (useAuthStore.persist.hasHydrated()) {
+      setHydrated(true);
+    }
+    return useAuthStore.persist.onFinishHydration(() => setHydrated(true));
+  }, []);
+
+  useEffect(() => {
+    if (hydrated && !accessToken) router.replace("/login");
+  }, [hydrated, accessToken, router]);
 
   const me = useQuery({
     queryKey: ["me"],
     queryFn: authApi.me,
-    enabled: !!accessToken && !user,
+    enabled: hydrated && !!accessToken && !user,
     retry: false,
   });
 
@@ -33,7 +42,7 @@ export default function MainLayout({
     if (me.data) setUser(me.data);
   }, [me.data, setUser]);
 
-  if (!accessToken) return null;
+  if (!hydrated || !accessToken) return null;
 
   return (
     <div className="min-h-screen flex flex-col">

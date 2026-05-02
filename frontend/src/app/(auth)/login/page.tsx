@@ -23,8 +23,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 const schema = z.object({
-  username: z.string().min(1, "아이디를 입력하세요"),
-  password: z.string().min(1, "비밀번호를 입력하세요"),
+  username: z.string().min(1, { error: "아이디를 입력하세요" }),
+  password: z.string().min(1, { error: "비밀번호를 입력하세요" }),
 });
 
 type FormValues = z.infer<typeof schema>;

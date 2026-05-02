@@ -68,7 +68,7 @@ export default function SubmissionDetailPage() {
           <CardContent className="p-4">
             <div className="text-muted-foreground">실행 시간</div>
             <div className="font-medium">
-              {s.runtimeMs !== null ? `${s.runtimeMs}ms` : "-"}
+              {s.runtime !== null ? `${s.runtime}ms` : "-"}
             </div>
           </CardContent>
         </Card>
@@ -76,7 +76,7 @@ export default function SubmissionDetailPage() {
           <CardContent className="p-4">
             <div className="text-muted-foreground">메모리</div>
             <div className="font-medium">
-              {s.memoryKb !== null ? `${s.memoryKb}KB` : "-"}
+              {s.memory !== null ? `${s.memory}KB` : "-"}
             </div>
           </CardContent>
         </Card>
