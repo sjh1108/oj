@@ -329,3 +329,93 @@
 - Phase 3 (비동기 채점): RabbitMQ 도입 → submission queue → WebSocket(STOMP) 실시간 결과 push + Redis 캐시
 - Phase 4 (프론트엔드): Next.js 14 + Monaco Editor
 - Phase 5 (운영): 도메인/HTTPS/백업/스터디원 7명 가입
+
+---
+
+# Phase 4: Next.js 14 프론트엔드 (2026-05-02 진행)
+
+## 목표
+백엔드 API 전 영역(인증/문제/제출)을 사용할 수 있는 프론트 MVP. 4/28 백준 종료 전 스터디원 7명 온보딩 가능 상태.
+
+## 스택 / 결정사항
+- **Next.js 14 (App Router)** + TypeScript strict
+- **Tailwind CSS + shadcn/ui** — 빠른 컴포넌트, 다크모드 기본
+- **TanStack Query v5** — 서버 상태 / 캐시
+- **Zustand (persist)** — 인증 토큰 클라이언트 상태
+- **@monaco-editor/react** — 코드 에디터
+- **react-hook-form + zod** — 폼 / 검증
+- **fetch wrapper (`lib/api.ts`)** — Authorization 헤더 자동, 401 시 logout
+- **위치**: 모노레포 — `oj/frontend/` 서브디렉토리 (백엔드와 같은 git repo)
+- **패키지 매니저**: npm (pnpm 미설치, 추가 설치 비용 회피)
+- **인증 토큰 저장**: localStorage (Phase 5에서 httpOnly cookie 강화)
+- **포트**: 3000 (백엔드 CORS 이미 등록됨)
+
+## 페이지 구조
+- `/` 홈 (소개 + 문제 목록 진입)
+- `/(auth)/login`, `/(auth)/signup`
+- `/(main)/problems` 문제 목록 (페이지네이션)
+- `/(main)/problems/[id]` 문제 상세 + Monaco 에디터 + 제출
+- `/(main)/submissions/me` 내 제출 목록
+- `/(main)/submissions/[id]` 제출 상세 (코드 + 결과)
+- `/(admin)/admin/problems/new` 문제 생성 (ADMIN 전용, 후순위)
+
+## 작업 순서
+
+### D1. 프로젝트 셋업
+- [x] `frontend/` 생성, `create-next-app@14 --ts --tailwind --app --src-dir --eslint`
+- [x] **Tailwind v4 업그레이드** (shadcn 4.6 base-nova가 TW v4 요구) + shadcn init + button/input/label/card/badge/sonner/select/textarea
+- [x] Root providers: TanStack Query + Toaster(sonner) + ThemeProvider(dark) — `src/components/providers.tsx`
+- [x] `.env.local`: `NEXT_PUBLIC_API_BASE_URL=http://localhost:8080`
+- [x] `lib/api.ts` (fetch wrapper, ApiError, 401 시 logout) + `types/api.ts` (백엔드 DTO 타입 전체)
+- [x] `npm run dev` → 200, 빌드 통과, /api/health fetch 동작
+
+### D2. 인증
+- [x] Zustand auth store (persist, `algoj-auth`) — accessToken / refreshToken / user
+- [x] `/login`, `/signup` 폼 (rhf+zod, 백엔드 fieldErrors → form.setError)
+- [x] 로그인 성공 → `/problems` 이동
+- [x] 보호 라우트: `(main)/layout.tsx`에서 토큰 체크 + me 자동 fetch
+- [x] Header: username + 로그아웃 + ADMIN 전용 메뉴 표시
+
+### D3. 문제 목록 / 상세 + 제출
+- [x] `/problems`: 목록 fetch + 페이지네이션 (Spring Page 호환)
+- [x] `/problems/[id]`: 좌측 본문(설명/입출력/샘플 TC) + 우측 Monaco + 언어 선택(5종) + starter 코드 + 제출 버튼
+- [x] 제출 → toast 표시 + `/submissions/[id]` 이동
+
+### D4. 내 제출 / 제출 상세
+- [x] `/submissions/me`: 본인 제출 목록 + StatusBadge (AC=초록, WA=빨강, TLE=주황, CE=노랑)
+- [x] `/submissions/[id]`: 메타 카드 4개 + errorMessage (있을 때) + 읽기전용 Monaco
+
+### D5. (선택) ADMIN 문제 생성 — **다음 세션으로 미룸**
+- [ ] `/admin/problems/new`: 폼 + TC 동적 추가/삭제
+- [ ] role 체크, USER 접근 시 `/problems`로 redirect
+
+### D6. 검증
+- [x] `npm run build` 통과 (9 routes — `/`, `/login`, `/signup`, `/problems`, `/problems/[id]`, `/submissions/me`, `/submissions/[id]`, `/_not-found`, `_error`)
+- [x] `npm run dev` 200 OK
+- [x] 백엔드 `/api/health` GET 200 (CORS preflight 200, frontend → backend 통신 가능)
+- [ ] **브라우저 검증 (사용자 수동)**: signup → login → 문제 풀이 → 제출 → 결과 확인
+
+## 트레이드오프 / 이슈
+- **Tailwind v3 → v4 강제 전환**: shadcn 4.6 "base-nova" 스타일이 TW v4 (CSS-first @theme) 가정. Next.js 14 scaffolding이 깔아둔 v3와 충돌해서 v4로 업그레이드 (`@tailwindcss/postcss`, `@import "tailwindcss"`, `tailwind.config.ts` 삭제, globals.css OKLCH 토큰 전환).
+- **`@base-ui/react` 채택 (vs Radix UI)**: 새 shadcn은 base-ui 기반. asChild prop 없음 → Link 스타일링 시 `buttonVariants()` 호출로 className 합성하는 패턴 사용.
+- **shadcn `form` 컴포넌트 install hang**: 원인 미상 — react-hook-form 직접 사용으로 우회 (form abstraction 불필요).
+- **localStorage JWT**: XSS 취약. Phase 5에서 Next.js Route Handler 프록시 + httpOnly cookie로 전환 예정.
+- **Spring Page<T> 직렬화**: `content/totalElements/...` 구조 그대로 사용. PageResponse 래퍼 미도입.
+- **CORS allowed origins**: `localhost:3000` 한 개. 운영 도메인 확정 시 백엔드 yml 추가 필요.
+
+## Phase 4 진행 상황 (2026-05-02)
+
+### 작성 파일 (frontend/)
+- 설정: `package.json`(deps 15개 추가), `postcss.config.mjs`(TW v4), `globals.css`(OKLCH 토큰), `.env.local`
+- shadcn UI: `button/input/label/card/badge/sonner/select/textarea` (8개)
+- 타입: `types/api.ts` (백엔드 DTO 전체)
+- API client: `lib/api.ts`, `lib/auth-api.ts`, `lib/problems-api.ts`, `lib/submissions-api.ts`
+- 상태: `lib/auth-store.ts` (zustand persist)
+- 컴포넌트: `components/providers.tsx`, `components/header.tsx`, `components/code-editor.tsx`, `components/status-badge.tsx`
+- 페이지: `app/page.tsx`, `app/layout.tsx`, `app/(auth)/{layout,login,signup}`, `app/(main)/{layout,problems,problems/[id],submissions/me,submissions/[id]}`
+
+### 다음 세션 (Phase 4 마무리 / Phase 5 진입)
+1. **D5 — ADMIN 문제 생성 페이지** (TC 동적 폼)
+2. 사용자 브라우저 검증 결과 반영 (버그 발견 시)
+3. (선택) Refresh token 자동 회전 — accessToken 만료 시 refresh 호출
+4. **Phase 5 진입**: 도메인 / HTTPS / 백업 / 스터디원 7명 온보딩

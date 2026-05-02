@@ -81,3 +81,29 @@
 ### `@JsonNaming`/`@JsonProperty` 우선순위
 - record + Jackson에서 snake_case 변환은 `@JsonNaming(SnakeCaseStrategy)`가 가장 안정적 (component마다 `@JsonProperty` 붙이는 것보다).
 - 응답 디코딩 시에도 같은 어노테이션이 양방향(serialize/deserialize)으로 동작.
+
+---
+
+## 2026-05-02 (Phase 4 — Next.js)
+
+### shadcn 4.x ↔ Tailwind 버전 매칭
+- `npx shadcn@latest init`은 기본 `base-nova` 스타일을 사용하며 Tailwind v4 가정 (CSS-first `@theme`, `@import "tailwindcss"`).
+- Next.js 14 scaffolding(`create-next-app@14 --tailwind`)은 TW v3 설치. 그대로 두면 `border-border` 등 토큰 클래스가 정의되지 않아 빌드 깨짐.
+- 해결: `tailwindcss@^4 @tailwindcss/postcss@^4`로 업그레이드, `postcss.config.mjs`의 plugin을 `@tailwindcss/postcss`로, `tailwind.config.ts` 삭제, `globals.css`를 `@import "tailwindcss"; @theme inline { ... }` 형태로 변경.
+- 향후 새 프로젝트는 처음부터 TW v4로 셋업.
+
+### base-ui 기반 shadcn에는 `asChild` prop 없음
+- 새 shadcn `Button`은 `@base-ui/react`(base-ui.com) 위에 만들어져 Radix Slot을 사용하지 않음 → `<Button asChild><Link/></Button>` 패턴 깨짐.
+- 해결: `buttonVariants()`을 export하고 `<Link className={cn(buttonVariants(), ...)}>` 패턴으로 className 합성. 또는 base-ui의 `render` prop 사용.
+
+### shadcn `form` 컴포넌트 install이 hang
+- `npx shadcn@latest add form` 명령이 "Checking registry"에서 멈추는 현상 (재시도/-y/--overwrite 모두 무력).
+- 원인 미확인. 우회: shadcn form abstraction 없이 react-hook-form을 직접 사용 (`<form onSubmit={form.handleSubmit(...)}>` + Input/Label/Button 조합). 코드량 거의 동일하고 의존도 한 단계 줄어듦.
+
+### Next.js 14 + create-next-app이 깐 layout.tsx의 함정
+- shadcn init이 layout.tsx를 수정하면서 `Geist`(Google fonts에 없음)를 `next/font/google`에서 import하는 코드를 끼워넣음 → 빌드 실패 ("Unknown font Geist").
+- 해결: 원래 `localFont` 기반(`./fonts/GeistVF.woff`, `GeistMonoVF.woff`)으로 되돌리고 Google import 제거.
+
+### Git Bash + curl `-w "$path = ..."` 인자에서 MSYS 경로 변환
+- `$path=/`인 채로 curl `-w` template에 `$path` 끼우면 MSYS가 leading `/`를 `C:/Program Files/Git/`로 변환 → 출력이 깨짐.
+- 해결: 단일 따옴표로 인용하거나 `MSYS_NO_PATHCONV=1` 설정. 검증 스크립트 작성 시 주의.
