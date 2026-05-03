@@ -29,6 +29,7 @@ jwt:
 algoj:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  seed-admin: ${ALGOJ_SEED_ADMIN:false}
 
 ---
 spring:
@@ -43,6 +44,9 @@ spring:
       hibernate:
         format_sql: true
         show_sql: true
+
+algoj:
+  seed-admin: ${ALGOJ_SEED_ADMIN:true}
 
 logging:
   level:
