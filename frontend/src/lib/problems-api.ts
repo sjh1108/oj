@@ -4,6 +4,8 @@ import type {
   PageResponse,
   ProblemDetailResponse,
   ProblemListItem,
+  TestCaseRequest,
+  TestCaseResponse,
 } from "@/types/api";
 
 export interface UpdateProblemRequest {
@@ -33,4 +35,23 @@ export const problemsApi = {
     }),
   delete: (id: number) =>
     api<void>(`/api/problems/${id}`, { method: "DELETE" }),
+  rejudge: (id: number) =>
+    api<{ queued: number }>(`/api/problems/${id}/rejudge`, { method: "POST" }),
+
+  listTestCases: (problemId: number) =>
+    api<TestCaseResponse[]>(`/api/problems/${problemId}/test-cases`),
+  addTestCase: (problemId: number, body: TestCaseRequest) =>
+    api<TestCaseResponse>(`/api/problems/${problemId}/test-cases`, {
+      method: "POST",
+      body,
+    }),
+  updateTestCase: (problemId: number, tcId: number, body: TestCaseRequest) =>
+    api<TestCaseResponse>(`/api/problems/${problemId}/test-cases/${tcId}`, {
+      method: "PUT",
+      body,
+    }),
+  deleteTestCase: (problemId: number, tcId: number) =>
+    api<void>(`/api/problems/${problemId}/test-cases/${tcId}`, {
+      method: "DELETE",
+    }),
 };

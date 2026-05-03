@@ -47,6 +47,17 @@ public class TestCaseService {
     }
 
     @Transactional
+    public TestCaseResponse update(Long problemId, Long testCaseId, TestCaseRequest req) {
+        TestCase tc = testCaseRepository.findById(testCaseId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.TEST_CASE_NOT_FOUND));
+        if (!tc.getProblem().getId().equals(problemId)) {
+            throw new BusinessException(ErrorCode.TEST_CASE_NOT_BELONG_TO_PROBLEM);
+        }
+        tc.update(req.input(), req.expectedOutput(), req.orderIndex(), req.isSample());
+        return TestCaseResponse.from(tc);
+    }
+
+    @Transactional
     public void delete(Long problemId, Long testCaseId) {
         TestCase tc = testCaseRepository.findById(testCaseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.TEST_CASE_NOT_FOUND));

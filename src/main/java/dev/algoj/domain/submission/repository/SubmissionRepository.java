@@ -13,6 +13,8 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
 
     Page<Submission> findAllByUserId(Long userId, Pageable pageable);
 
+    List<Submission> findAllByProblemId(Long problemId);
+
     boolean existsByUserIdAndProblemIdAndStatus(Long userId, Long problemId, Submission.Status status);
 
     Page<Submission> findAllByProblemIdAndStatusAndIsPublicTrue(

@@ -122,4 +122,25 @@ public class SubmissionService {
         s.setVisibility(isPublic);
         return SubmissionResponse.from(s);
     }
+
+    @Transactional
+    public Long resetForRejudge(Long submissionId) {
+        Submission s = submissionRepository.findById(submissionId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SUBMISSION_NOT_FOUND));
+        int total = s.getProblem().getTestCases().size();
+        s.resetForRejudge(total);
+        return s.getId();
+    }
+
+    @Transactional
+    public List<Long> resetAllForProblemRejudge(Long problemId) {
+        Problem problem = problemRepository.findById(problemId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.PROBLEM_NOT_FOUND));
+        int total = problem.getTestCases().size();
+        List<Submission> submissions = submissionRepository.findAllByProblemId(problemId);
+        return submissions.stream()
+                .peek(s -> s.resetForRejudge(total))
+                .map(Submission::getId)
+                .toList();
+    }
 }

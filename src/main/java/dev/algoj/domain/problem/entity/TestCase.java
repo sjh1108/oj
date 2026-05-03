@@ -50,4 +50,11 @@ public class TestCase {
     void assignProblem(Problem problem) {
         this.problem = problem;
     }
+
+    public void update(String input, String expectedOutput, Integer orderIndex, Boolean isSample) {
+        this.input = input;
+        this.expectedOutput = expectedOutput;
+        this.orderIndex = orderIndex;
+        this.isSample = isSample;
+    }
 }

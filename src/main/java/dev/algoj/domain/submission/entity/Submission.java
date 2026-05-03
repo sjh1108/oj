@@ -126,6 +126,15 @@ public class Submission {
         this.isPublic = isPublic;
     }
 
+    public void resetForRejudge(int totalTestCases) {
+        this.status = Status.PENDING;
+        this.passedTestCases = 0;
+        this.totalTestCases = totalTestCases;
+        this.runtime = null;
+        this.memory = null;
+        this.errorMessage = null;
+    }
+
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();

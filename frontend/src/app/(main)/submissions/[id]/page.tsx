@@ -43,6 +43,18 @@ export default function SubmissionDetailPage() {
     },
   });
 
+  const rejudge = useMutation({
+    mutationFn: () => submissionsApi.rejudge(id),
+    onSuccess: () => {
+      toast.info("재채점 큐에 등록 — 채점 중...");
+      qc.invalidateQueries({ queryKey: ["submission", id] });
+    },
+    onError: (err) => {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("재채점 실패");
+    },
+  });
+
   if (sub.isLoading) {
     return (
       <main className="max-w-5xl mx-auto p-6 text-muted-foreground">
@@ -60,6 +72,7 @@ export default function SubmissionDetailPage() {
 
   const s = sub.data;
   const isOwner = user?.username === s.username;
+  const isAdmin = user?.role === "ADMIN";
 
   return (
     <main className="max-w-5xl mx-auto p-6 space-y-4">
@@ -72,12 +85,28 @@ export default function SubmissionDetailPage() {
             total={s.totalTestCases}
           />
         </div>
-        <Link
-          href={`/problems/${s.problemId}`}
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          ← {s.problemTitle}
-        </Link>
+        <div className="flex items-center gap-3">
+          {isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (confirm(`제출 #${s.id} 재채점할까요?`)) {
+                  rejudge.mutate();
+                }
+              }}
+              disabled={rejudge.isPending || isPending(s)}
+            >
+              {rejudge.isPending ? "요청 중..." : "재채점"}
+            </Button>
+          )}
+          <Link
+            href={`/problems/${s.problemId}`}
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            ← {s.problemTitle}
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 text-sm">

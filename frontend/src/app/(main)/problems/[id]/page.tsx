@@ -117,12 +117,18 @@ export default function ProblemDetailPage() {
               <DifficultyBadge difficulty={p.difficulty} />
             </div>
             {isAdmin && (
-              <div className="flex gap-2">
+              <div className="flex gap-3 items-center">
                 <Link
                   href={`/admin/problems/${p.id}/edit`}
                   className="text-sm text-muted-foreground hover:text-foreground underline"
                 >
                   수정
+                </Link>
+                <Link
+                  href={`/admin/problems/${p.id}/test-cases`}
+                  className="text-sm text-muted-foreground hover:text-foreground underline"
+                >
+                  TC 관리
                 </Link>
                 <button
                   className="text-sm text-destructive hover:underline"

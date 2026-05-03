@@ -15,8 +15,11 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/submissions")
@@ -62,5 +65,13 @@ public class SubmissionController {
             @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.ok(
                 submissionService.updateVisibility(id, body.isPublic(), principal));
+    }
+
+    @PostMapping("/{id}/rejudge")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, Object>> rejudge(@PathVariable Long id) {
+        Long resetId = submissionService.resetForRejudge(id);
+        judgeAsyncService.judge(resetId);
+        return ResponseEntity.accepted().body(Map.of("submissionId", resetId, "queued", 1));
     }
 }

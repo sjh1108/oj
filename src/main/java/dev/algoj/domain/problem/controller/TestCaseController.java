@@ -33,6 +33,14 @@ public class TestCaseController {
         return ResponseEntity.ok(testCaseService.listAll(problemId));
     }
 
+    @PutMapping("/{testCaseId}")
+    public ResponseEntity<TestCaseResponse> update(
+            @PathVariable Long problemId,
+            @PathVariable Long testCaseId,
+            @Valid @RequestBody TestCaseRequest request) {
+        return ResponseEntity.ok(testCaseService.update(problemId, testCaseId, request));
+    }
+
     @DeleteMapping("/{testCaseId}")
     public ResponseEntity<Void> delete(
             @PathVariable Long problemId,

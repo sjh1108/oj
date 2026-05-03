@@ -29,4 +29,9 @@ export const submissionsApi = {
     api<PageResponse<SubmissionResponse>>(
       `/api/problems/${problemId}/solutions?page=${page}&size=${size}`,
     ),
+  rejudge: (id: number) =>
+    api<{ submissionId: number; queued: number }>(
+      `/api/submissions/${id}/rejudge`,
+      { method: "POST" },
+    ),
 };
