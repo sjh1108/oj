@@ -346,6 +346,18 @@ export default function NewProblemPage() {
                 {form.formState.errors.testCases.root.message}
               </p>
             )}
+            <div className="flex justify-center pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  tcs.append({ input: "", expectedOutput: "", isSample: false })
+                }
+              >
+                + TC 추가
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
