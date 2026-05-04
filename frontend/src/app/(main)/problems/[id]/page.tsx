@@ -1,13 +1,14 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy } from "lucide-react";
+import { Copy, Play, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { problemsApi } from "@/lib/problems-api";
+import { runApi } from "@/lib/run-api";
 import { submissionsApi } from "@/lib/submissions-api";
 import { ApiError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
@@ -22,7 +23,22 @@ import {
 import { CodeEditor } from "@/components/code-editor";
 import { Markdown } from "@/components/markdown";
 import { DifficultyBadge } from "@/components/status-badge";
-import type { Language } from "@/types/api";
+import type { Language, RunResponse } from "@/types/api";
+
+type CustomCase = {
+  id: string;
+  stdin: string;
+  isRunning: boolean;
+  result: RunResponse | null;
+};
+
+const RUN_STATUS_LABEL: Record<RunResponse["status"], string> = {
+  OK: "정상 종료",
+  TIME_LIMIT: "시간 초과",
+  RUNTIME_ERROR: "런타임 에러",
+  COMPILE_ERROR: "컴파일 에러",
+  SYSTEM_ERROR: "시스템 오류",
+};
 
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: "JAVA", label: "Java" },
@@ -62,6 +78,84 @@ export default function ProblemDetailPage() {
       toast.success(`${label} 복사됨`);
     } catch {
       toast.error("복사 실패");
+    }
+  };
+
+  const [sampleResults, setSampleResults] = useState<
+    Record<number, RunResponse | null>
+  >({});
+  const [sampleRunning, setSampleRunning] = useState<Record<number, boolean>>(
+    {},
+  );
+  const [customCases, setCustomCases] = useState<CustomCase[]>([]);
+
+  const runOneSample = async (tcId: number, stdin: string) => {
+    setSampleRunning((m) => ({ ...m, [tcId]: true }));
+    try {
+      const res = await runApi.run({
+        problemId: id,
+        language,
+        sourceCode: code,
+        stdin,
+      });
+      setSampleResults((m) => ({ ...m, [tcId]: res }));
+    } catch (err) {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("실행 실패");
+    } finally {
+      setSampleRunning((m) => ({ ...m, [tcId]: false }));
+    }
+  };
+
+  const addCustomCase = () => {
+    setCustomCases((cs) => [
+      ...cs,
+      {
+        id:
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random()}`,
+        stdin: "",
+        isRunning: false,
+        result: null,
+      },
+    ]);
+  };
+
+  const removeCustomCase = (cid: string) => {
+    setCustomCases((cs) => cs.filter((c) => c.id !== cid));
+  };
+
+  const updateCustomStdin = (cid: string, value: string) => {
+    setCustomCases((cs) =>
+      cs.map((c) => (c.id === cid ? { ...c, stdin: value } : c)),
+    );
+  };
+
+  const runCustomCase = async (cid: string) => {
+    const target = customCases.find((c) => c.id === cid);
+    if (!target) return;
+    setCustomCases((cs) =>
+      cs.map((c) => (c.id === cid ? { ...c, isRunning: true } : c)),
+    );
+    try {
+      const res = await runApi.run({
+        problemId: id,
+        language,
+        sourceCode: code,
+        stdin: target.stdin,
+      });
+      setCustomCases((cs) =>
+        cs.map((c) =>
+          c.id === cid ? { ...c, result: res, isRunning: false } : c,
+        ),
+      );
+    } catch (err) {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("실행 실패");
+      setCustomCases((cs) =>
+        cs.map((c) => (c.id === cid ? { ...c, isRunning: false } : c)),
+      );
     }
   };
 
@@ -200,56 +294,244 @@ export default function ProblemDetailPage() {
             </Card>
           )}
 
-          {p.sampleTestCases.map((tc, i) => (
-            <div key={tc.id} className="grid grid-cols-2 gap-3 items-stretch">
-              <Card className="h-full">
-                <CardHeader>
-                  <CardTitle className="text-sm">입력 예시 {i + 1}</CardTitle>
-                  <CardAction>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        copyToClipboard(tc.input, `입력 예시 ${i + 1}`)
-                      }
-                      className="text-muted-foreground hover:text-foreground p-1 -m-1"
-                      aria-label={`입력 예시 ${i + 1} 복사`}
-                    >
-                      <Copy className="size-4" />
-                    </button>
-                  </CardAction>
-                </CardHeader>
-                <CardContent className="flex-1">
-                  <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap h-full">
-                    {tc.input}
-                  </pre>
-                </CardContent>
-              </Card>
-              <Card className="h-full">
-                <CardHeader>
-                  <CardTitle className="text-sm">출력 예시 {i + 1}</CardTitle>
-                  <CardAction>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        copyToClipboard(
-                          tc.expectedOutput,
-                          `출력 예시 ${i + 1}`,
-                        )
-                      }
-                      className="text-muted-foreground hover:text-foreground p-1 -m-1"
-                      aria-label={`출력 예시 ${i + 1} 복사`}
-                    >
-                      <Copy className="size-4" />
-                    </button>
-                  </CardAction>
-                </CardHeader>
-                <CardContent className="flex-1">
-                  <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap h-full">
-                    {tc.expectedOutput}
-                  </pre>
-                </CardContent>
-              </Card>
+          {p.sampleTestCases.length > 0 && (
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <h2 className="text-sm font-semibold">예제 테스트케이스</h2>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  Promise.all(
+                    p.sampleTestCases.map((tc) =>
+                      runOneSample(tc.id, tc.input),
+                    ),
+                  )
+                }
+                disabled={
+                  !code.trim() ||
+                  Object.values(sampleRunning).some(Boolean)
+                }
+              >
+                <Play className="size-4 mr-1" />
+                {Object.values(sampleRunning).some(Boolean)
+                  ? "실행 중..."
+                  : "예제 실행"}
+              </Button>
             </div>
+          )}
+
+          {p.sampleTestCases.map((tc, i) => {
+            const result = sampleResults[tc.id];
+            const running = sampleRunning[tc.id];
+            const passed =
+              result?.status === "OK" &&
+              (result.stdout ?? "").trimEnd() === tc.expectedOutput.trimEnd();
+            return (
+              <div key={tc.id} className="space-y-2">
+                <div className="grid grid-cols-2 gap-3 items-stretch">
+                  <Card className="h-full">
+                    <CardHeader>
+                      <CardTitle className="text-sm">
+                        입력 예시 {i + 1}
+                      </CardTitle>
+                      <CardAction>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyToClipboard(tc.input, `입력 예시 ${i + 1}`)
+                          }
+                          className="text-muted-foreground hover:text-foreground p-1 -m-1"
+                          aria-label={`입력 예시 ${i + 1} 복사`}
+                        >
+                          <Copy className="size-4" />
+                        </button>
+                      </CardAction>
+                    </CardHeader>
+                    <CardContent className="flex-1">
+                      <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap h-full">
+                        {tc.input}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                  <Card className="h-full">
+                    <CardHeader>
+                      <CardTitle className="text-sm">
+                        출력 예시 {i + 1}
+                      </CardTitle>
+                      <CardAction>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            copyToClipboard(
+                              tc.expectedOutput,
+                              `출력 예시 ${i + 1}`,
+                            )
+                          }
+                          className="text-muted-foreground hover:text-foreground p-1 -m-1"
+                          aria-label={`출력 예시 ${i + 1} 복사`}
+                        >
+                          <Copy className="size-4" />
+                        </button>
+                      </CardAction>
+                    </CardHeader>
+                    <CardContent className="flex-1">
+                      <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap h-full">
+                        {tc.expectedOutput}
+                      </pre>
+                    </CardContent>
+                  </Card>
+                </div>
+                {running && (
+                  <div className="text-xs text-muted-foreground rounded border px-3 py-2">
+                    실행 중...
+                  </div>
+                )}
+                {!running && result && (
+                  <div
+                    className={`rounded border px-3 py-2 text-sm space-y-1 ${
+                      passed
+                        ? "border-emerald-500/40 bg-emerald-500/5"
+                        : "border-destructive/40 bg-destructive/5"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 text-xs">
+                      <span
+                        className={`font-semibold ${
+                          passed ? "text-emerald-600" : "text-destructive"
+                        }`}
+                      >
+                        {passed ? "✓ PASS" : "✗ FAIL"}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {RUN_STATUS_LABEL[result.status]}
+                        {result.runtimeMs !== null &&
+                          ` · ${result.runtimeMs}ms`}
+                        {result.memoryKb !== null &&
+                          ` · ${result.memoryKb}KB`}
+                      </span>
+                    </div>
+                    {result.status === "OK" && (
+                      <div>
+                        <div className="text-xs text-muted-foreground">
+                          실제 출력
+                        </div>
+                        <pre className="text-sm bg-muted p-2 rounded whitespace-pre-wrap mt-1">
+                          {result.stdout ?? ""}
+                        </pre>
+                      </div>
+                    )}
+                    {result.errorMessage && (
+                      <div>
+                        <div className="text-xs text-muted-foreground">
+                          {result.status === "COMPILE_ERROR"
+                            ? "컴파일 메시지"
+                            : "에러 메시지"}
+                        </div>
+                        <pre className="text-xs bg-muted p-2 rounded whitespace-pre-wrap mt-1 text-destructive">
+                          {result.errorMessage}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <div className="flex items-center justify-between gap-3 pt-4">
+            <h2 className="text-sm font-semibold">사용자 테스트케이스</h2>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addCustomCase}
+            >
+              <Plus className="size-4 mr-1" />
+              케이스 추가
+            </Button>
+          </div>
+          {customCases.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              내가 만든 입력값으로 코드를 돌려볼 수 있습니다. DB에 저장되지 않아요.
+            </p>
+          )}
+          {customCases.map((c, i) => (
+            <Card key={c.id}>
+              <CardHeader>
+                <CardTitle className="text-sm">
+                  사용자 케이스 {i + 1}
+                </CardTitle>
+                <CardAction>
+                  <button
+                    type="button"
+                    onClick={() => removeCustomCase(c.id)}
+                    className="text-muted-foreground hover:text-destructive p-1 -m-1"
+                    aria-label={`사용자 케이스 ${i + 1} 삭제`}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </CardAction>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">
+                    입력 (stdin)
+                  </div>
+                  <textarea
+                    value={c.stdin}
+                    onChange={(e) => updateCustomStdin(c.id, e.target.value)}
+                    rows={4}
+                    placeholder="여기에 stdin을 입력하세요"
+                    className="w-full font-mono text-sm rounded-lg border border-input bg-transparent px-2.5 py-2 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => runCustomCase(c.id)}
+                    disabled={c.isRunning || !code.trim()}
+                  >
+                    <Play className="size-4 mr-1" />
+                    {c.isRunning ? "실행 중..." : "실행"}
+                  </Button>
+                </div>
+                {c.result && (
+                  <div className="rounded border px-3 py-2 text-sm space-y-1 bg-muted/30">
+                    <div className="text-xs text-muted-foreground">
+                      {RUN_STATUS_LABEL[c.result.status]}
+                      {c.result.runtimeMs !== null &&
+                        ` · ${c.result.runtimeMs}ms`}
+                      {c.result.memoryKb !== null &&
+                        ` · ${c.result.memoryKb}KB`}
+                    </div>
+                    {c.result.status === "OK" && (
+                      <div>
+                        <div className="text-xs text-muted-foreground">
+                          출력
+                        </div>
+                        <pre className="text-sm bg-muted p-2 rounded whitespace-pre-wrap mt-1">
+                          {c.result.stdout ?? ""}
+                        </pre>
+                      </div>
+                    )}
+                    {c.result.errorMessage && (
+                      <div>
+                        <div className="text-xs text-muted-foreground">
+                          {c.result.status === "COMPILE_ERROR"
+                            ? "컴파일 메시지"
+                            : "에러 메시지"}
+                        </div>
+                        <pre className="text-xs bg-muted p-2 rounded whitespace-pre-wrap mt-1 text-destructive">
+                          {c.result.errorMessage}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           ))}
         </section>
 

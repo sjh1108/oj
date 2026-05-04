@@ -139,3 +139,27 @@ export interface ErrorResponse {
   message: string;
   fieldErrors?: { field: string; message: string }[];
 }
+
+export type RunStatus =
+  | "OK"
+  | "TIME_LIMIT"
+  | "RUNTIME_ERROR"
+  | "COMPILE_ERROR"
+  | "SYSTEM_ERROR";
+
+export interface RunRequest {
+  problemId: number;
+  language: Language;
+  sourceCode: string;
+  stdin: string;
+}
+
+export interface RunResponse {
+  status: RunStatus;
+  stdout: string | null;
+  stderr: string | null;
+  compileOutput: string | null;
+  runtimeMs: number | null;
+  memoryKb: number | null;
+  errorMessage: string | null;
+}
