@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Copy } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
@@ -48,6 +49,15 @@ export default function ProblemDetailPage() {
 
   const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE);
   const [code, setCode] = useState<string>(STARTER[DEFAULT_LANGUAGE]);
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${label} 복사됨`);
+    } catch {
+      toast.error("복사 실패");
+    }
+  };
 
   const problem = useQuery({
     queryKey: ["problem", id],
@@ -187,8 +197,16 @@ export default function ProblemDetailPage() {
           {p.sampleTestCases.map((tc, i) => (
             <div key={tc.id} className="grid grid-cols-2 gap-3">
               <Card>
-                <CardHeader>
+                <CardHeader className="flex-row items-center justify-between space-y-0">
                   <CardTitle className="text-sm">입력 예시 {i + 1}</CardTitle>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(tc.input, `입력 예시 ${i + 1}`)}
+                    className="text-muted-foreground hover:text-foreground p-1 -m-1"
+                    aria-label={`입력 예시 ${i + 1} 복사`}
+                  >
+                    <Copy className="size-4" />
+                  </button>
                 </CardHeader>
                 <CardContent>
                   <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap">
@@ -197,8 +215,18 @@ export default function ProblemDetailPage() {
                 </CardContent>
               </Card>
               <Card>
-                <CardHeader>
+                <CardHeader className="flex-row items-center justify-between space-y-0">
                   <CardTitle className="text-sm">출력 예시 {i + 1}</CardTitle>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyToClipboard(tc.expectedOutput, `출력 예시 ${i + 1}`)
+                    }
+                    className="text-muted-foreground hover:text-foreground p-1 -m-1"
+                    aria-label={`출력 예시 ${i + 1} 복사`}
+                  >
+                    <Copy className="size-4" />
+                  </button>
                 </CardHeader>
                 <CardContent>
                   <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap">
