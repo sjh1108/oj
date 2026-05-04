@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import type { Difficulty } from "@/types/api";
 
 const schema = z.object({
@@ -92,19 +92,19 @@ export default function EditProblemPage() {
   if (!user || user.role !== "ADMIN") return null;
   if (problem.isLoading)
     return (
-      <main className="max-w-4xl mx-auto p-6 text-muted-foreground">
+      <main className="max-w-6xl mx-auto p-6 text-muted-foreground">
         불러오는 중...
       </main>
     );
   if (problem.isError || !problem.data)
     return (
-      <main className="max-w-4xl mx-auto p-6 text-destructive">
+      <main className="max-w-6xl mx-auto p-6 text-destructive">
         문제를 찾을 수 없습니다
       </main>
     );
 
   return (
-    <main className="max-w-4xl mx-auto p-6">
+    <main className="max-w-6xl mx-auto p-6">
       <h1 className="text-2xl font-semibold mb-6">
         문제 수정 — #{problem.data.id}
       </h1>
@@ -123,30 +123,60 @@ export default function EditProblemPage() {
               <Input id="title" {...form.register("title")} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">문제 설명</Label>
-              <Textarea
-                id="description"
-                rows={6}
-                {...form.register("description")}
+              <Label htmlFor="description">
+                문제 설명{" "}
+                <span className="text-xs text-muted-foreground font-normal">
+                  (Markdown · GFM · KaTeX 지원)
+                </span>
+              </Label>
+              <Controller
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <MarkdownEditor
+                    id="description"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                    minHeight={320}
+                  />
+                )}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="inputDescription">입력 설명</Label>
-                <Textarea
-                  id="inputDescription"
-                  rows={3}
-                  {...form.register("inputDescription")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="outputDescription">출력 설명</Label>
-                <Textarea
-                  id="outputDescription"
-                  rows={3}
-                  {...form.register("outputDescription")}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="inputDescription">입력 설명</Label>
+              <Controller
+                control={form.control}
+                name="inputDescription"
+                render={({ field }) => (
+                  <MarkdownEditor
+                    id="inputDescription"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                    minHeight={180}
+                  />
+                )}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="outputDescription">출력 설명</Label>
+              <Controller
+                control={form.control}
+                name="outputDescription"
+                render={({ field }) => (
+                  <MarkdownEditor
+                    id="outputDescription"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                    minHeight={180}
+                  />
+                )}
+              />
             </div>
           </CardContent>
         </Card>

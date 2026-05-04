@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useFieldArray, useForm } from "react-hook-form";
+import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -16,6 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import type { CreateProblemRequest, Difficulty } from "@/types/api";
 
 const tcSchema = z.object({
@@ -122,7 +123,7 @@ export default function NewProblemPage() {
   if (!user || user.role !== "ADMIN") return null;
 
   return (
-    <main className="max-w-4xl mx-auto p-6">
+    <main className="max-w-6xl mx-auto p-6">
       <h1 className="text-2xl font-semibold mb-6">문제 출제</h1>
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -142,11 +143,26 @@ export default function NewProblemPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="description">문제 설명</Label>
-              <Textarea
-                id="description"
-                rows={6}
-                {...form.register("description")}
+              <Label htmlFor="description">
+                문제 설명{" "}
+                <span className="text-xs text-muted-foreground font-normal">
+                  (Markdown · GFM · KaTeX 지원)
+                </span>
+              </Label>
+              <Controller
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <MarkdownEditor
+                    id="description"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                    minHeight={320}
+                    placeholder={"# 제목\n\n문제 본문...\n\n인라인 수식: $O(n \\log n)$"}
+                  />
+                )}
               />
               {form.formState.errors.description && (
                 <p className="text-sm text-destructive">
@@ -155,23 +171,39 @@ export default function NewProblemPage() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="inputDescription">입력 설명 (선택)</Label>
-                <Textarea
-                  id="inputDescription"
-                  rows={3}
-                  {...form.register("inputDescription")}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="outputDescription">출력 설명 (선택)</Label>
-                <Textarea
-                  id="outputDescription"
-                  rows={3}
-                  {...form.register("outputDescription")}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="inputDescription">입력 설명 (선택)</Label>
+              <Controller
+                control={form.control}
+                name="inputDescription"
+                render={({ field }) => (
+                  <MarkdownEditor
+                    id="inputDescription"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                    minHeight={180}
+                  />
+                )}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="outputDescription">출력 설명 (선택)</Label>
+              <Controller
+                control={form.control}
+                name="outputDescription"
+                render={({ field }) => (
+                  <MarkdownEditor
+                    id="outputDescription"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                    minHeight={180}
+                  />
+                )}
+              />
             </div>
           </CardContent>
         </Card>

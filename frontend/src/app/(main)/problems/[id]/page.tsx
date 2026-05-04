@@ -13,6 +13,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeEditor } from "@/components/code-editor";
+import { Markdown } from "@/components/markdown";
 import { DifficultyBadge } from "@/components/status-badge";
 import type { Language } from "@/types/api";
 
@@ -154,8 +155,8 @@ export default function ProblemDetailPage() {
             <CardHeader>
               <CardTitle className="text-base">문제 설명</CardTitle>
             </CardHeader>
-            <CardContent className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap">
-              {p.description}
+            <CardContent>
+              <Markdown>{p.description}</Markdown>
             </CardContent>
           </Card>
 
@@ -164,8 +165,8 @@ export default function ProblemDetailPage() {
               <CardHeader>
                 <CardTitle className="text-base">입력</CardTitle>
               </CardHeader>
-              <CardContent className="whitespace-pre-wrap text-sm">
-                {p.inputDescription}
+              <CardContent>
+                <Markdown>{p.inputDescription}</Markdown>
               </CardContent>
             </Card>
           )}
@@ -175,8 +176,8 @@ export default function ProblemDetailPage() {
               <CardHeader>
                 <CardTitle className="text-base">출력</CardTitle>
               </CardHeader>
-              <CardContent className="whitespace-pre-wrap text-sm">
-                {p.outputDescription}
+              <CardContent>
+                <Markdown>{p.outputDescription}</Markdown>
               </CardContent>
             </Card>
           )}
