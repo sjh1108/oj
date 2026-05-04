@@ -146,7 +146,7 @@ export default function ProblemDetailPage() {
             )}
           </div>
           <div className="text-sm text-muted-foreground">
-            시간 제한 {p.timeLimit}ms · 메모리 {p.memoryLimit}KB
+            시간 제한 {(p.timeLimit / 1000).toLocaleString("ko-KR", { maximumFractionDigits: 3 })}초 · 메모리 {Math.round(p.memoryLimit / 1024).toLocaleString("ko-KR")}MB
             {p.authorUsername && ` · 출제자 ${p.authorUsername}`}
             {!p.isPublic && " · 비공개"}
           </div>

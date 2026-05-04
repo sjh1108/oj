@@ -35,12 +35,12 @@ const schema = z.object({
   outputDescription: z.string(),
   timeLimit: z
     .number({ error: "숫자를 입력하세요" })
-    .min(100, { error: "100ms 이상" })
-    .max(60000, { error: "60000ms 이하" }),
+    .min(0.1, { error: "0.1s 이상" })
+    .max(60, { error: "60s 이하" }),
   memoryLimit: z
     .number({ error: "숫자를 입력하세요" })
-    .min(1024, { error: "1024KB 이상" })
-    .max(1048576, { error: "1048576KB 이하" }),
+    .min(1, { error: "1MB 이상" })
+    .max(1024, { error: "1024MB 이하" }),
   difficulty: z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM", "DIAMOND"]),
   isPublic: z.boolean(),
   testCases: z
@@ -76,8 +76,8 @@ export default function NewProblemPage() {
       description: "",
       inputDescription: "",
       outputDescription: "",
-      timeLimit: 1000,
-      memoryLimit: 262144,
+      timeLimit: 1,
+      memoryLimit: 256,
       difficulty: "BRONZE",
       isPublic: true,
       testCases: [
@@ -112,6 +112,8 @@ export default function NewProblemPage() {
   const onSubmit = (values: FormValues) => {
     const payload: CreateProblemRequest = {
       ...values,
+      timeLimit: Math.round(values.timeLimit * 1000),
+      memoryLimit: Math.round(values.memoryLimit * 1024),
       testCases: values.testCases.map((tc, i) => ({
         ...tc,
         orderIndex: i,
@@ -214,10 +216,13 @@ export default function NewProblemPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="timeLimit">시간 제한 (ms)</Label>
+              <Label htmlFor="timeLimit">시간 제한 (초)</Label>
               <Input
                 id="timeLimit"
                 type="number"
+                step="0.1"
+                min="0.1"
+                max="60"
                 {...form.register("timeLimit", { valueAsNumber: true })}
               />
               {form.formState.errors.timeLimit && (
@@ -227,10 +232,13 @@ export default function NewProblemPage() {
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="memoryLimit">메모리 제한 (KB)</Label>
+              <Label htmlFor="memoryLimit">메모리 제한 (MB)</Label>
               <Input
                 id="memoryLimit"
                 type="number"
+                step="1"
+                min="1"
+                max="1024"
                 {...form.register("memoryLimit", { valueAsNumber: true })}
               />
               {form.formState.errors.memoryLimit && (

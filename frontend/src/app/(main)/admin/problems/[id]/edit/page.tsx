@@ -23,8 +23,8 @@ const schema = z.object({
   description: z.string().min(1, { error: "설명을 입력하세요" }),
   inputDescription: z.string(),
   outputDescription: z.string(),
-  timeLimit: z.number().min(100).max(60000),
-  memoryLimit: z.number().min(1024).max(1048576),
+  timeLimit: z.number().min(0.1, { error: "0.1s 이상" }).max(60, { error: "60s 이하" }),
+  memoryLimit: z.number().min(1, { error: "1MB 이상" }).max(1024, { error: "1024MB 이하" }),
   difficulty: z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM", "DIAMOND"]),
   isPublic: z.boolean(),
 });
@@ -67,8 +67,8 @@ export default function EditProblemPage() {
           description: problem.data.description,
           inputDescription: problem.data.inputDescription ?? "",
           outputDescription: problem.data.outputDescription ?? "",
-          timeLimit: problem.data.timeLimit,
-          memoryLimit: problem.data.memoryLimit,
+          timeLimit: problem.data.timeLimit / 1000,
+          memoryLimit: problem.data.memoryLimit / 1024,
           difficulty: problem.data.difficulty,
           isPublic: problem.data.isPublic,
         }
@@ -110,7 +110,13 @@ export default function EditProblemPage() {
       </h1>
 
       <form
-        onSubmit={form.handleSubmit((v) => mutation.mutate(v))}
+        onSubmit={form.handleSubmit((v) =>
+          mutation.mutate({
+            ...v,
+            timeLimit: Math.round(v.timeLimit * 1000),
+            memoryLimit: Math.round(v.memoryLimit * 1024),
+          }),
+        )}
         className="space-y-6"
       >
         <Card>
@@ -187,20 +193,36 @@ export default function EditProblemPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="timeLimit">시간 제한 (ms)</Label>
+              <Label htmlFor="timeLimit">시간 제한 (초)</Label>
               <Input
                 id="timeLimit"
                 type="number"
+                step="0.1"
+                min="0.1"
+                max="60"
                 {...form.register("timeLimit", { valueAsNumber: true })}
               />
+              {form.formState.errors.timeLimit && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.timeLimit.message}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="memoryLimit">메모리 제한 (KB)</Label>
+              <Label htmlFor="memoryLimit">메모리 제한 (MB)</Label>
               <Input
                 id="memoryLimit"
                 type="number"
+                step="1"
+                min="1"
+                max="1024"
                 {...form.register("memoryLimit", { valueAsNumber: true })}
               />
+              {form.formState.errors.memoryLimit && (
+                <p className="text-sm text-destructive">
+                  {form.formState.errors.memoryLimit.message}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="difficulty">난이도</Label>
