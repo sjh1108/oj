@@ -530,10 +530,7 @@ export default function ProblemDetailPage() {
                     </div>
                     <div>
                       <div className="text-xs text-muted-foreground mb-1">
-                        예상 출력{" "}
-                        <span className="text-muted-foreground/70">
-                          (선택 — 비워두면 비교 없이 실행 결과만 표시)
-                        </span>
+                        예상 출력
                       </div>
                       <textarea
                         value={c.expectedOutput}
