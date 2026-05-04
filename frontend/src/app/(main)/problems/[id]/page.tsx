@@ -28,6 +28,7 @@ import type { Language, RunResponse } from "@/types/api";
 type CustomCase = {
   id: string;
   stdin: string;
+  expectedOutput: string;
   isRunning: boolean;
   result: RunResponse | null;
 };
@@ -126,6 +127,7 @@ export default function ProblemDetailPage() {
             ? crypto.randomUUID()
             : `${Date.now()}-${Math.random()}`,
         stdin: "",
+        expectedOutput: "",
         isRunning: false,
         result: null,
       },
@@ -139,6 +141,12 @@ export default function ProblemDetailPage() {
   const updateCustomStdin = (cid: string, value: string) => {
     setCustomCases((cs) =>
       cs.map((c) => (c.id === cid ? { ...c, stdin: value } : c)),
+    );
+  };
+
+  const updateCustomExpected = (cid: string, value: string) => {
+    setCustomCases((cs) =>
+      cs.map((c) => (c.id === cid ? { ...c, expectedOutput: value } : c)),
     );
   };
 
@@ -480,83 +488,143 @@ export default function ProblemDetailPage() {
               내가 만든 입력값으로 코드를 돌려볼 수 있습니다. DB에 저장되지 않아요.
             </p>
           )}
-          {customCases.map((c, i) => (
-            <Card key={c.id}>
-              <CardHeader>
-                <CardTitle className="text-sm">
-                  사용자 케이스 {i + 1}
-                </CardTitle>
-                <CardAction>
-                  <button
-                    type="button"
-                    onClick={() => removeCustomCase(c.id)}
-                    className="text-muted-foreground hover:text-destructive p-1 -m-1"
-                    aria-label={`사용자 케이스 ${i + 1} 삭제`}
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                </CardAction>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <div className="text-xs text-muted-foreground mb-1">
-                    입력 (stdin)
-                  </div>
-                  <textarea
-                    value={c.stdin}
-                    onChange={(e) => updateCustomStdin(c.id, e.target.value)}
-                    rows={4}
-                    placeholder="여기에 stdin을 입력하세요"
-                    className="w-full font-mono text-sm rounded-lg border border-input bg-transparent px-2.5 py-2 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-                  />
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => runCustomCase(c.id)}
-                    disabled={c.isRunning || !code.trim()}
-                  >
-                    <Play className="size-4 mr-1" />
-                    {c.isRunning ? "실행 중..." : "실행"}
-                  </Button>
-                </div>
-                {c.result && (
-                  <div className="rounded border px-3 py-2 text-sm space-y-1 bg-muted/30">
-                    <div className="text-xs text-muted-foreground">
-                      {RUN_STATUS_LABEL[c.result.status]}
-                      {c.result.runtimeMs !== null &&
-                        ` · ${c.result.runtimeMs}ms`}
-                      {c.result.memoryKb !== null &&
-                        ` · ${c.result.memoryKb}KB`}
+          {customCases.map((c, i) => {
+            const hasExpected = c.expectedOutput.trim().length > 0;
+            const passed =
+              hasExpected &&
+              c.result?.status === "OK" &&
+              normalizeOutput(c.result.stdout) ===
+                normalizeOutput(c.expectedOutput);
+            return (
+              <Card key={c.id}>
+                <CardHeader>
+                  <CardTitle className="text-sm">
+                    사용자 케이스 {i + 1}
+                  </CardTitle>
+                  <CardAction>
+                    <button
+                      type="button"
+                      onClick={() => removeCustomCase(c.id)}
+                      className="text-muted-foreground hover:text-destructive p-1 -m-1"
+                      aria-label={`사용자 케이스 ${i + 1} 삭제`}
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </CardAction>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        입력 (stdin)
+                      </div>
+                      <textarea
+                        value={c.stdin}
+                        onChange={(e) =>
+                          updateCustomStdin(c.id, e.target.value)
+                        }
+                        rows={5}
+                        placeholder="여기에 stdin을 입력하세요"
+                        className="w-full font-mono text-sm rounded-lg border border-input bg-transparent px-2.5 py-2 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      />
                     </div>
-                    {c.result.status === "OK" && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">
-                          출력
-                        </div>
-                        <pre className="text-sm bg-muted p-2 rounded whitespace-pre-wrap mt-1">
-                          {c.result.stdout ?? ""}
-                        </pre>
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-1">
+                        예상 출력{" "}
+                        <span className="text-muted-foreground/70">
+                          (선택 — 비워두면 비교 없이 실행 결과만 표시)
+                        </span>
                       </div>
-                    )}
-                    {c.result.errorMessage && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">
-                          {c.result.status === "COMPILE_ERROR"
-                            ? "컴파일 메시지"
-                            : "에러 메시지"}
-                        </div>
-                        <pre className="text-xs bg-muted p-2 rounded whitespace-pre-wrap mt-1 text-destructive">
-                          {c.result.errorMessage}
-                        </pre>
-                      </div>
-                    )}
+                      <textarea
+                        value={c.expectedOutput}
+                        onChange={(e) =>
+                          updateCustomExpected(c.id, e.target.value)
+                        }
+                        rows={5}
+                        placeholder="입력하면 예제처럼 PASS/FAIL 비교"
+                        className="w-full font-mono text-sm rounded-lg border border-input bg-transparent px-2.5 py-2 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      />
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => runCustomCase(c.id)}
+                      disabled={c.isRunning || !code.trim()}
+                    >
+                      <Play className="size-4 mr-1" />
+                      {c.isRunning ? "실행 중..." : "실행"}
+                    </Button>
+                  </div>
+                  {c.result && (
+                    <div
+                      className={`rounded border px-3 py-2 text-sm space-y-1 ${
+                        hasExpected && c.result.status === "OK"
+                          ? passed
+                            ? "border-emerald-500/40 bg-emerald-500/5"
+                            : "border-destructive/40 bg-destructive/5"
+                          : "bg-muted/30"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 text-xs">
+                        {hasExpected && c.result.status === "OK" && (
+                          <span
+                            className={`font-semibold ${
+                              passed ? "text-emerald-600" : "text-destructive"
+                            }`}
+                          >
+                            {passed ? "✓ PASS" : "✗ FAIL"}
+                          </span>
+                        )}
+                        <span className="text-muted-foreground">
+                          {RUN_STATUS_LABEL[c.result.status]}
+                          {c.result.runtimeMs !== null &&
+                            ` · ${c.result.runtimeMs}ms`}
+                          {c.result.memoryKb !== null &&
+                            ` · ${c.result.memoryKb}KB`}
+                        </span>
+                      </div>
+                      {c.result.status === "OK" && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <div className="text-xs text-muted-foreground">
+                              실제 출력
+                            </div>
+                            <pre className="text-sm bg-muted p-2 rounded whitespace-pre-wrap mt-1">
+                              {c.result.stdout ?? ""}
+                            </pre>
+                          </div>
+                          {hasExpected && !passed && (
+                            <div>
+                              <div className="text-xs text-muted-foreground">
+                                예상 출력
+                              </div>
+                              <pre className="text-sm bg-muted p-2 rounded whitespace-pre-wrap mt-1">
+                                {c.expectedOutput}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {c.result.errorMessage && (
+                        <div>
+                          <div className="text-xs text-muted-foreground">
+                            {c.result.status === "COMPILE_ERROR"
+                              ? "컴파일 메시지"
+                              : "에러 메시지"}
+                          </div>
+                          <pre className="text-xs bg-muted p-2 rounded whitespace-pre-wrap mt-1 text-destructive">
+                            {c.result.errorMessage}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </section>
 
         <section className="space-y-3 lg:sticky lg:top-4 lg:self-start">
