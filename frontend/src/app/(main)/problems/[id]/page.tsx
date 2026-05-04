@@ -12,7 +12,13 @@ import { submissionsApi } from "@/lib/submissions-api";
 import { ApiError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { CodeEditor } from "@/components/code-editor";
 import { Markdown } from "@/components/markdown";
 import { DifficultyBadge } from "@/components/status-badge";
@@ -195,41 +201,50 @@ export default function ProblemDetailPage() {
           )}
 
           {p.sampleTestCases.map((tc, i) => (
-            <div key={tc.id} className="grid grid-cols-2 gap-3">
-              <Card>
-                <CardHeader className="flex-row items-center justify-between space-y-0">
+            <div key={tc.id} className="grid grid-cols-2 gap-3 items-stretch">
+              <Card className="h-full">
+                <CardHeader>
                   <CardTitle className="text-sm">입력 예시 {i + 1}</CardTitle>
-                  <button
-                    type="button"
-                    onClick={() => copyToClipboard(tc.input, `입력 예시 ${i + 1}`)}
-                    className="text-muted-foreground hover:text-foreground p-1 -m-1"
-                    aria-label={`입력 예시 ${i + 1} 복사`}
-                  >
-                    <Copy className="size-4" />
-                  </button>
+                  <CardAction>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        copyToClipboard(tc.input, `입력 예시 ${i + 1}`)
+                      }
+                      className="text-muted-foreground hover:text-foreground p-1 -m-1"
+                      aria-label={`입력 예시 ${i + 1} 복사`}
+                    >
+                      <Copy className="size-4" />
+                    </button>
+                  </CardAction>
                 </CardHeader>
-                <CardContent>
-                  <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap">
+                <CardContent className="flex-1">
+                  <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap h-full">
                     {tc.input}
                   </pre>
                 </CardContent>
               </Card>
-              <Card>
-                <CardHeader className="flex-row items-center justify-between space-y-0">
+              <Card className="h-full">
+                <CardHeader>
                   <CardTitle className="text-sm">출력 예시 {i + 1}</CardTitle>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      copyToClipboard(tc.expectedOutput, `출력 예시 ${i + 1}`)
-                    }
-                    className="text-muted-foreground hover:text-foreground p-1 -m-1"
-                    aria-label={`출력 예시 ${i + 1} 복사`}
-                  >
-                    <Copy className="size-4" />
-                  </button>
+                  <CardAction>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        copyToClipboard(
+                          tc.expectedOutput,
+                          `출력 예시 ${i + 1}`,
+                        )
+                      }
+                      className="text-muted-foreground hover:text-foreground p-1 -m-1"
+                      aria-label={`출력 예시 ${i + 1} 복사`}
+                    >
+                      <Copy className="size-4" />
+                    </button>
+                  </CardAction>
                 </CardHeader>
-                <CardContent>
-                  <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap">
+                <CardContent className="flex-1">
+                  <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap h-full">
                     {tc.expectedOutput}
                   </pre>
                 </CardContent>
