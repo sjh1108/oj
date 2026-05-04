@@ -40,6 +40,16 @@ const RUN_STATUS_LABEL: Record<RunResponse["status"], string> = {
   SYSTEM_ERROR: "시스템 오류",
 };
 
+// Judge0 채점과 동일한 정규화: CRLF→LF, 각 줄 trailing 공백 제거, 끝 공백/개행 제거
+function normalizeOutput(s: string | null | undefined): string {
+  if (!s) return "";
+  return s
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+$/, ""))
+    .join("\n")
+    .replace(/\s+$/, "");
+}
+
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: "JAVA", label: "Java" },
   { value: "PYTHON3", label: "Python 3" },
@@ -324,9 +334,11 @@ export default function ProblemDetailPage() {
           {p.sampleTestCases.map((tc, i) => {
             const result = sampleResults[tc.id];
             const running = sampleRunning[tc.id];
+            const normalizedActual = normalizeOutput(result?.stdout);
+            const normalizedExpected = normalizeOutput(tc.expectedOutput);
             const passed =
               result?.status === "OK" &&
-              (result.stdout ?? "").trimEnd() === tc.expectedOutput.trimEnd();
+              normalizedActual === normalizedExpected;
             return (
               <div key={tc.id} className="space-y-2">
                 <div className="grid grid-cols-2 gap-3 items-stretch">
@@ -412,13 +424,25 @@ export default function ProblemDetailPage() {
                       </span>
                     </div>
                     {result.status === "OK" && (
-                      <div>
-                        <div className="text-xs text-muted-foreground">
-                          실제 출력
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <div className="text-xs text-muted-foreground">
+                            실제 출력
+                          </div>
+                          <pre className="text-sm bg-muted p-2 rounded whitespace-pre-wrap mt-1">
+                            {result.stdout ?? ""}
+                          </pre>
                         </div>
-                        <pre className="text-sm bg-muted p-2 rounded whitespace-pre-wrap mt-1">
-                          {result.stdout ?? ""}
-                        </pre>
+                        {!passed && (
+                          <div>
+                            <div className="text-xs text-muted-foreground">
+                              예상 출력
+                            </div>
+                            <pre className="text-sm bg-muted p-2 rounded whitespace-pre-wrap mt-1">
+                              {tc.expectedOutput}
+                            </pre>
+                          </div>
+                        )}
                       </div>
                     )}
                     {result.errorMessage && (
