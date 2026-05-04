@@ -18,12 +18,14 @@ import { DifficultyBadge } from "@/components/status-badge";
 import type { Language } from "@/types/api";
 
 const LANGUAGES: { value: Language; label: string }[] = [
-  { value: "PYTHON3", label: "Python 3" },
   { value: "JAVA", label: "Java" },
+  { value: "PYTHON3", label: "Python 3" },
   { value: "CPP", label: "C++" },
   { value: "C", label: "C" },
   { value: "JAVASCRIPT", label: "JavaScript" },
 ];
+
+const DEFAULT_LANGUAGE: Language = "JAVA";
 
 const STARTER: Record<Language, string> = {
   PYTHON3: "import sys\ninput = sys.stdin.readline\n\n",
@@ -44,8 +46,8 @@ export default function ProblemDetailPage() {
   const qc = useQueryClient();
   const isAdmin = user?.role === "ADMIN";
 
-  const [language, setLanguage] = useState<Language>("PYTHON3");
-  const [code, setCode] = useState<string>(STARTER.PYTHON3);
+  const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE);
+  const [code, setCode] = useState<string>(STARTER[DEFAULT_LANGUAGE]);
 
   const problem = useQuery({
     queryKey: ["problem", id],
