@@ -11,10 +11,25 @@ import { problemsApi } from "@/lib/problems-api";
 import { useAuthStore } from "@/lib/auth-store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CodeEditor } from "@/components/code-editor";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { TestCaseRequest, TestCaseResponse } from "@/types/api";
+import type {
+  GenerateTestCaseRequest,
+  GenerateTestCaseResponse,
+  Language,
+  TestCaseRequest,
+  TestCaseResponse,
+} from "@/types/api";
+
+const LANGUAGES: { value: Language; label: string }[] = [
+  { value: "PYTHON3", label: "Python 3" },
+  { value: "CPP", label: "C++" },
+  { value: "JAVA", label: "Java" },
+  { value: "C", label: "C" },
+  { value: "JAVASCRIPT", label: "JavaScript" },
+];
 
 interface DraftTC {
   id?: number;
@@ -42,6 +57,18 @@ export default function TestCaseManagementPage() {
   const qc = useQueryClient();
 
   const [drafts, setDrafts] = useState<DraftTC[]>([]);
+
+  // ── Generator panel state ──────────────────────────────────
+  const [genLang, setGenLang] = useState<Language>("PYTHON3");
+  const [genCode, setGenCode] = useState("");
+  const [genStdin, setGenStdin] = useState("");
+  const [solLang, setSolLang] = useState<Language>("PYTHON3");
+  const [solCode, setSolCode] = useState("");
+  const [genOrderIndex, setGenOrderIndex] = useState(0);
+  const [genIsSample, setGenIsSample] = useState(false);
+  const [genResult, setGenResult] = useState<GenerateTestCaseResponse | null>(
+    null,
+  );
 
   useEffect(() => {
     if (user && user.role !== "ADMIN") {
@@ -109,6 +136,37 @@ export default function TestCaseManagementPage() {
     },
     onError: (err) => handleApiError(err, "재채점 실패"),
   });
+
+  const generateMutation = useMutation({
+    mutationFn: (body: GenerateTestCaseRequest) =>
+      problemsApi.generateTestCase(problemId, body),
+    onSuccess: (res) => {
+      setGenResult(res);
+      setGenOrderIndex((n) => n + 1);
+      qc.invalidateQueries({ queryKey: ["test-cases", problemId] });
+      qc.invalidateQueries({ queryKey: ["problem", problemId] });
+      toast.success(
+        `생성 완료 — 입력 ${res.inputSize}자 / 출력 ${res.outputSize}자`,
+      );
+    },
+    onError: (err) => handleApiError(err, "생성 실패"),
+  });
+
+  const handleGenerate = () => {
+    if (!genCode.trim() || !solCode.trim()) {
+      toast.error("생성기 코드와 모범답안 코드를 모두 입력하세요");
+      return;
+    }
+    generateMutation.mutate({
+      generatorLanguage: genLang,
+      generatorCode: genCode,
+      generatorStdin: genStdin || undefined,
+      solutionLanguage: solLang,
+      solutionCode: solCode,
+      orderIndex: genOrderIndex,
+      isSample: genIsSample,
+    });
+  };
 
   const setField = <K extends keyof DraftTC>(
     idx: number,
@@ -244,6 +302,135 @@ export default function TestCaseManagementPage() {
           >
             {rejudgeMutation.isPending ? "재채점 중..." : "전체 재채점"}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">생성기로 추가</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            큰 입력은 직접 붙여넣지 말고, 입력을 stdout으로 출력하는 생성기 코드와
+            모범답안 코드를 올리면 서버가 Judge0로 실행해 입력·정답을 만들어 저장합니다.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">생성기 (입력을 stdout으로 출력)</Label>
+                <select
+                  value={genLang}
+                  onChange={(e) => setGenLang(e.target.value as Language)}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  {LANGUAGES.map((l) => (
+                    <option key={l.value} value={l.value}>
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <CodeEditor
+                language={genLang}
+                value={genCode}
+                onChange={setGenCode}
+                height="260px"
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">모범답안 (입력 → 정답을 stdout으로)</Label>
+                <select
+                  value={solLang}
+                  onChange={(e) => setSolLang(e.target.value as Language)}
+                  className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  {LANGUAGES.map((l) => (
+                    <option key={l.value} value={l.value}>
+                      {l.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <CodeEditor
+                language={solLang}
+                value={solCode}
+                onChange={setSolCode}
+                height="260px"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">
+              생성기 stdin (선택 — 시드/파라미터)
+            </Label>
+            <Textarea
+              rows={2}
+              value={genStdin}
+              onChange={(e) => setGenStdin(e.target.value)}
+              placeholder="생성기가 stdin으로 시드를 받는다면 여기에 입력"
+            />
+          </div>
+
+          <div className="flex items-end gap-4 flex-wrap">
+            <div className="space-y-2 max-w-28">
+              <Label className="text-xs">순서</Label>
+              <Input
+                type="number"
+                value={genOrderIndex}
+                onChange={(e) => setGenOrderIndex(Number(e.target.value))}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer h-9">
+              <input
+                type="checkbox"
+                checked={genIsSample}
+                onChange={(e) => setGenIsSample(e.target.checked)}
+                className="size-4 rounded border-input"
+              />
+              샘플
+            </label>
+            <div className="ml-auto">
+              <Button
+                onClick={handleGenerate}
+                disabled={generateMutation.isPending}
+              >
+                {generateMutation.isPending ? "생성 중..." : "생성"}
+              </Button>
+            </div>
+          </div>
+
+          {genResult && (
+            <div className="rounded-md border p-3 space-y-2 text-sm">
+              <div className="font-medium text-emerald-600">
+                TC #{genResult.id} 생성됨 — 입력 {genResult.inputSize}자 / 출력{" "}
+                {genResult.outputSize}자
+                {genResult.generatorRuntimeMs != null &&
+                  ` · 생성기 ${genResult.generatorRuntimeMs}ms`}
+                {genResult.solutionRuntimeMs != null &&
+                  ` · 모범답안 ${genResult.solutionRuntimeMs}ms`}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">
+                    입력 미리보기
+                  </div>
+                  <pre className="bg-muted rounded p-2 overflow-x-auto text-xs whitespace-pre-wrap break-all max-h-40">
+                    {genResult.inputPreview}
+                  </pre>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">
+                    출력 미리보기
+                  </div>
+                  <pre className="bg-muted rounded p-2 overflow-x-auto text-xs whitespace-pre-wrap break-all max-h-40">
+                    {genResult.outputPreview}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
