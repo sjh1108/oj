@@ -2,6 +2,16 @@
 
 같은 박스에 이미 Judge0가 떠 있다는 전제. 이 가이드는 백엔드(Spring Boot) + MySQL을 추가로 올린다.
 
+> **두 가지 배포 방식이 있다.**
+> - **(A) 자동 — GitHub Actions CI/CD** (권장): `master`에 머지되면 이미지를 GHCR에 push 하고
+>   서버가 pull 해서 컨테이너로 재기동한다. → 아래 [CI/CD 파이프라인](#cicd-파이프라인-github-actions) 참고.
+> - **(B) 수동 — systemd + jar**: 로컬에서 `bootJar` 빌드 후 `scp`로 jar를 올리고 systemd로 실행.
+>   → 이 문서의 1~7단계.
+>
+> A 방식은 백엔드를 **컨테이너**로 돌리므로 `algoj-api.service`(systemd) 대신
+> `docker-compose.prod.yml`의 `api` 서비스를 쓴다. 같은 박스에서 둘을 **동시에 켜지 말 것**
+> (8080 포트 충돌).
+
 ## 박스 레이아웃 (목표)
 
 ```
@@ -146,3 +156,53 @@ scp build/libs/algoj.jar ubuntu@<박스IP>:/opt/algoj/algoj.jar
 # 박스
 sudo systemctl restart algoj-api
 ```
+
+---
+
+## CI/CD 파이프라인 (GitHub Actions)
+
+워크플로우는 `.github/workflows/`에 있다.
+
+### `ci.yml` — PR / 브랜치 push 시 검증
+- **backend**: MySQL 서비스 컨테이너를 띄우고 `./gradlew build` (테스트 포함) 실행.
+- **frontend**: `npm ci` → `npm run lint` → `npm run build`.
+- **docker-build**: 백엔드 Docker 이미지가 빌드되는지만 확인 (push 안 함).
+
+### `cd.yml` — `master` push 시 배포
+1. **test**: 백엔드 테스트 재실행.
+2. **build-and-push**: 이미지 빌드 후 `ghcr.io/<owner>/oj-api:latest` + `:sha-<커밋>`로 push.
+   GHCR 인증은 Actions 기본 `GITHUB_TOKEN`을 사용.
+3. **deploy** (`DEPLOY_ENABLED=true`일 때만): `docker-compose.prod.yml`을 박스로 복사한 뒤
+   SSH로 접속해 `docker compose pull && up -d` 실행.
+
+### 필요한 GitHub Secrets / Variables
+
+저장소 **Settings → Secrets and variables → Actions**에서 설정.
+
+| 종류 | 이름 | 설명 |
+|------|------|------|
+| Variable | `DEPLOY_ENABLED` | `true`여야 deploy 잡이 동작. 미설정 시 build+push까지만. |
+| Secret | `SSH_HOST` | 배포 박스 IP/호스트 |
+| Secret | `SSH_USER` | SSH 사용자 (예: `ubuntu`) |
+| Secret | `SSH_KEY` | SSH 개인키 (PEM 전체) |
+| Secret | `SSH_PORT` | (선택) 기본 22 |
+| Secret | `GHCR_PAT` | (선택) 박스에서 GHCR pull용 read:packages 토큰. 패키지를 public으로 두면 불필요. |
+
+> GHCR 패키지는 기본 **private**이다. 박스가 이미지를 받으려면 `GHCR_PAT`로 로그인하거나,
+> GHCR 패키지 페이지에서 visibility를 **public**으로 바꾼다.
+
+### 박스 1회 준비 (컨테이너 배포용)
+
+```bash
+cd /opt/algoj
+# .env 는 기존 그대로 사용 (B 방식과 공유). DB_HOST/JUDGE0_URL 는 compose가 override 한다.
+# docker-compose.prod.yml 은 CD가 매 배포마다 자동 복사하므로 수동 준비 불필요.
+
+# 기존 systemd jar 방식과 충돌 방지 — 컨테이너로 전환한다면 systemd unit 중지
+sudo systemctl disable --now algoj-api || true
+
+# 첫 배포 시 스키마 생성 (prod 는 ddl-auto=validate 라 빈 DB면 실패)
+echo "SPRING_JPA_HIBERNATE_DDL_AUTO=update" >> /opt/algoj/.env   # 1회만, 이후 제거
+```
+
+이후 `master`에 머지하면 자동 배포된다. 수동 트리거는 Actions 탭의 **CD → Run workflow**.
