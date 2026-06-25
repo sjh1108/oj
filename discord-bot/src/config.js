@@ -13,9 +13,10 @@ export const config = {
   token: required("DISCORD_TOKEN"),
   clientId: required("DISCORD_CLIENT_ID"),
   guildId: required("DISCORD_GUILD_ID"),
-  // Base URL of the OJ backend, e.g. http://localhost:8080 or https://algoj.duckdns.org
+  // Base URL of the OJ backend API, e.g. http://localhost:8080 or http://127.0.0.1:8080.
   apiBaseUrl: (process.env.OJ_API_BASE_URL || "http://localhost:8080").replace(/\/$/, ""),
   botApiKey: required("BOT_API_KEY"),
-  // Where members log in to change their password after a reset.
-  webBaseUrl: (process.env.OJ_WEB_BASE_URL || "https://algoj.duckdns.org").replace(/\/$/, ""),
+  // Base URL of the FRONTEND web app (Vercel) where members log in / change
+  // their password — the site that serves /account. NOT the API domain.
+  webBaseUrl: (process.env.OJ_WEB_BASE_URL || "http://localhost:3000").replace(/\/$/, ""),
 };

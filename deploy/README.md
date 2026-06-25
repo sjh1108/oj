@@ -240,11 +240,16 @@ openssl rand -base64 32      # → BOT_API_KEY 에 붙임
 #   DISCORD_TOKEN=<봇 토큰>
 #   DISCORD_CLIENT_ID=<application id>
 #   DISCORD_GUILD_ID=<서버 id>
-#   OJ_WEB_BASE_URL=https://algoj.duckdns.org
+#   OJ_WEB_BASE_URL=https://<프론트 Vercel 도메인>   # 예: https://algoj.vercel.app
 ```
 
 > `BOT_API_KEY`는 백엔드(`/api/internal/**` 검증)와 봇(요청 헤더)이 **같은 값**을 써야 한다.
 > 백엔드는 `.env`의 `BOT_API_KEY`를 자동으로 읽는다.
+>
+> ⚠️ `OJ_WEB_BASE_URL`은 **프론트엔드(Vercel) 웹 도메인**이다. API 도메인
+> (`algoj.duckdns.org`)을 넣으면 `/비밀번호분실` 링크의 `/account`가 백엔드(Spring)로 가서
+> **JSON 401 인증 에러 페이지**만 뜬다. (봇이 API를 호출하는 주소 `OJ_API_BASE_URL`과 혼동 주의 —
+> 그건 백엔드, `OJ_WEB_BASE_URL`은 프론트.)
 
 ### 3단계 — 백엔드 스키마 업데이트 (1회)
 
@@ -274,6 +279,12 @@ docker logs algoj-bot --tail 30      # "Logged in as ..." + 슬래시 명령 등
 ```
 
 컨테이너 시작 시 슬래시 명령(`/연동`, `/비밀번호분실`)을 길드에 자동 등록한다.
+
+> **봇 → 백엔드 연결**: prod compose는 API를 `127.0.0.1:8080`(루프백 전용)에만 바인딩하므로
+> 봇은 `docker-compose.bot.yml`의 `network_mode: host` + `OJ_API_BASE_URL=http://127.0.0.1:8080`
+> 으로 호스트 네트워크를 공유해 접근한다. (브릿지 `host.docker.internal`로는
+> `ECONNREFUSED`가 난다.) `/opt/algoj`에 `docker-compose.bot.yml`이 없으면 repo의
+> `deploy/docker-compose.bot.yml`을 그대로 올려두면 된다(CD는 prod compose만 자동 복사).
 
 ### 사용 흐름 (회원)
 
