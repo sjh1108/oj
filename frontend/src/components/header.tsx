@@ -52,7 +52,12 @@ export function Header() {
             </Link>
           )}
           {user && (
-            <span className="text-sm text-muted-foreground">{user.username}</span>
+            <Link
+              href="/account"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              {user.username}
+            </Link>
           )}
           <Button
             variant="outline"

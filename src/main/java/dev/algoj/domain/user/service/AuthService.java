@@ -1,5 +1,6 @@
 package dev.algoj.domain.user.service;
 
+import dev.algoj.domain.user.dto.ChangePasswordRequest;
 import dev.algoj.domain.user.dto.LoginRequest;
 import dev.algoj.domain.user.dto.SignupRequest;
 import dev.algoj.domain.user.dto.TokenResponse;
@@ -55,5 +56,17 @@ public class AuthService {
         String accessToken = jwtTokenProvider.createAccessToken(user);
         String refreshToken = jwtTokenProvider.createRefreshToken(user);
         return TokenResponse.of(accessToken, refreshToken, jwtTokenProvider.getAccessTokenValidity());
+    }
+
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.CURRENT_PASSWORD_MISMATCH);
+        }
+
+        user.changePassword(passwordEncoder.encode(request.newPassword()));
     }
 }

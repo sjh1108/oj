@@ -144,6 +144,11 @@ export interface VisibilityRequest {
   isPublic: boolean;
 }
 
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
 export interface AdminResetPasswordRequest {
   usernameOrEmail: string;
 }

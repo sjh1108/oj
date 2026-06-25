@@ -19,6 +19,7 @@ public enum ErrorCode {
     EXPIRED_TOKEN(HttpStatus.UNAUTHORIZED, "A003", "만료된 토큰입니다."),
     UNAUTHENTICATED(HttpStatus.UNAUTHORIZED, "A004", "인증이 필요합니다."),
     FORBIDDEN(HttpStatus.FORBIDDEN, "A005", "권한이 없습니다."),
+    CURRENT_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "A006", "현재 비밀번호가 일치하지 않습니다."),
 
     // Problem / TestCase
     PROBLEM_NOT_FOUND(HttpStatus.NOT_FOUND, "P001", "존재하지 않는 문제입니다."),
