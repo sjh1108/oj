@@ -144,6 +144,17 @@ export interface VisibilityRequest {
   isPublic: boolean;
 }
 
+export interface AdminResetPasswordRequest {
+  usernameOrEmail: string;
+}
+
+export interface AdminResetPasswordResponse {
+  userId: number;
+  username: string;
+  email: string;
+  temporaryPassword: string;
+}
+
 export interface PageResponse<T> {
   content: T[];
   totalElements: number;
