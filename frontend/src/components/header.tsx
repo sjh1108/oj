@@ -43,8 +43,21 @@ export function Header() {
               문제 출제
             </Link>
           )}
+          {user?.role === "ADMIN" && (
+            <Link
+              href="/admin/users"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              회원 관리
+            </Link>
+          )}
           {user && (
-            <span className="text-sm text-muted-foreground">{user.username}</span>
+            <Link
+              href="/account"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              {user.username}
+            </Link>
           )}
           <Button
             variant="outline"

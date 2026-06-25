@@ -144,6 +144,27 @@ export interface VisibilityRequest {
   isPublic: boolean;
 }
 
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface DiscordLinkCodeResponse {
+  code: string;
+  expiresInSeconds: number;
+}
+
+export interface AdminResetPasswordRequest {
+  usernameOrEmail: string;
+}
+
+export interface AdminResetPasswordResponse {
+  userId: number;
+  username: string;
+  email: string;
+  temporaryPassword: string;
+}
+
 export interface PageResponse<T> {
   content: T[];
   totalElements: number;

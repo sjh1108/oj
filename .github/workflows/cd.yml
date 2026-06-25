@@ -12,6 +12,7 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/oj-api
+  BOT_IMAGE: ghcr.io/${{ github.repository_owner }}/oj-bot
 
 jobs:
   # ── Re-run the backend test suite before shipping ──────────────
@@ -89,6 +90,45 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Build & push the Discord bot image (independent of the API) ─
+  build-and-push-bot:
+    name: Build & push bot image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.BOT_IMAGE }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./discord-bot
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

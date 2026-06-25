@@ -31,6 +31,9 @@ public class User {
     @Column(nullable = false)
     private Role role;
 
+    @Column(unique = true, length = 32)
+    private String discordUserId;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -59,5 +62,13 @@ public class User {
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
+    public void linkDiscord(String discordUserId) {
+        this.discordUserId = discordUserId;
     }
 }
