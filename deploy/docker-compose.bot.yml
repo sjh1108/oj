@@ -12,8 +12,10 @@ services:
     container_name: algoj-bot
     restart: unless-stopped
     env_file: .env
+    # The prod compose binds the API to 127.0.0.1:8080 (loopback only, nginx
+    # proxies to it), so it is NOT reachable via the docker bridge gateway
+    # (host.docker.internal). Share the host network namespace instead — then
+    # the bot reaches the API on the host's own localhost.
+    network_mode: host
     environment:
-      # The API runs on the host (127.0.0.1:8080) via the prod compose.
-      OJ_API_BASE_URL: http://host.docker.internal:8080
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      OJ_API_BASE_URL: http://127.0.0.1:8080
