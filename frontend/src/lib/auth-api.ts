@@ -1,6 +1,7 @@
 import { api } from "@/lib/api";
 import type {
   ChangePasswordRequest,
+  DiscordLinkCodeResponse,
   LoginRequest,
   SignupRequest,
   TokenResponse,
@@ -16,4 +17,8 @@ export const authApi = {
   mySolvedProblems: () => api<number[]>("/api/users/me/solved-problems"),
   changePassword: (body: ChangePasswordRequest) =>
     api<void>("/api/users/me/password", { method: "PUT", body }),
+  discordLinkCode: () =>
+    api<DiscordLinkCodeResponse>("/api/users/me/discord/link-code", {
+      method: "POST",
+    }),
 };

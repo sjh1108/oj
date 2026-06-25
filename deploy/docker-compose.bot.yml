@@ -1,0 +1,19 @@
+# Optional: runs the AlgoJ Discord bot on the box.
+# Kept separate from docker-compose.prod.yml so the API/MySQL deploy stays
+# independent — start this only after you've set the DISCORD_* vars in .env.
+#
+#   export BOT_IMAGE=ghcr.io/sjh1108/oj-bot
+#   docker compose -f docker-compose.bot.yml --env-file .env pull
+#   docker compose -f docker-compose.bot.yml --env-file .env up -d
+
+services:
+  bot:
+    image: ${BOT_IMAGE:-ghcr.io/sjh1108/oj-bot}:latest
+    container_name: algoj-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # The API runs on the host (127.0.0.1:8080) via the prod compose.
+      OJ_API_BASE_URL: http://host.docker.internal:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

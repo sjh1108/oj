@@ -2,10 +2,12 @@ package dev.algoj.domain.user.controller;
 
 import dev.algoj.domain.submission.service.SubmissionService;
 import dev.algoj.domain.user.dto.ChangePasswordRequest;
+import dev.algoj.domain.user.dto.DiscordLinkCodeResponse;
 import dev.algoj.domain.user.dto.UserResponse;
 import dev.algoj.domain.user.entity.User;
 import dev.algoj.domain.user.repository.UserRepository;
 import dev.algoj.domain.user.service.AuthService;
+import dev.algoj.domain.user.service.DiscordAccountService;
 import dev.algoj.global.exception.BusinessException;
 import dev.algoj.global.exception.ErrorCode;
 import dev.algoj.global.security.UserPrincipal;
@@ -14,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,6 +32,7 @@ public class UserController {
     private final UserRepository userRepository;
     private final SubmissionService submissionService;
     private final AuthService authService;
+    private final DiscordAccountService discordAccountService;
 
     @GetMapping("/me")
     public ResponseEntity<UserResponse> me(@AuthenticationPrincipal UserPrincipal principal) {
@@ -49,5 +53,11 @@ public class UserController {
             @Valid @RequestBody ChangePasswordRequest request) {
         authService.changePassword(principal.getId(), request);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/me/discord/link-code")
+    public ResponseEntity<DiscordLinkCodeResponse> issueDiscordLinkCode(
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(discordAccountService.issueLinkCode(principal.getId()));
     }
 }

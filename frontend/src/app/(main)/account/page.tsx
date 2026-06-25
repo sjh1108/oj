@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { DiscordLinkCodeResponse } from "@/types/api";
 
 const schema = z
   .object({
@@ -56,6 +57,16 @@ export default function AccountPage() {
     onError: (err) => {
       if (err instanceof ApiError) toast.error(err.message);
       else toast.error("비밀번호 변경 실패");
+    },
+  });
+
+  const [linkCode, setLinkCode] = useState<DiscordLinkCodeResponse | null>(null);
+  const linkMutation = useMutation({
+    mutationFn: authApi.discordLinkCode,
+    onSuccess: (res) => setLinkCode(res),
+    onError: (err) => {
+      if (err instanceof ApiError) toast.error(err.message);
+      else toast.error("연동 코드 발급 실패");
     },
   });
 
@@ -127,6 +138,39 @@ export default function AccountPage() {
               {mutation.isPending ? "변경 중..." : "비밀번호 변경"}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">디스코드 연동</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            연동해두면 비밀번호를 잊었을 때 디스코드에서{" "}
+            <code className="text-xs">/비밀번호분실</code> 로 임시 비밀번호를
+            받을 수 있습니다. 아래 코드를 받아 디스코드에서{" "}
+            <code className="text-xs">/연동 &lt;코드&gt;</code> 를 입력하세요.
+          </p>
+          <Button
+            variant="outline"
+            onClick={() => linkMutation.mutate()}
+            disabled={linkMutation.isPending}
+          >
+            {linkMutation.isPending ? "발급 중..." : "연동 코드 발급"}
+          </Button>
+          {linkCode && (
+            <div className="rounded-md border p-3 space-y-1">
+              <code className="font-mono text-2xl tracking-[0.3em]">
+                {linkCode.code}
+              </code>
+              <p className="text-sm text-muted-foreground">
+                디스코드에서{" "}
+                <code className="text-xs">/연동 {linkCode.code}</code> 입력 ·{" "}
+                {Math.round(linkCode.expiresInSeconds / 60)}분 내 유효
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </main>

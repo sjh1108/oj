@@ -149,6 +149,11 @@ export interface ChangePasswordRequest {
   newPassword: string;
 }
 
+export interface DiscordLinkCodeResponse {
+  code: string;
+  expiresInSeconds: number;
+}
+
 export interface AdminResetPasswordRequest {
   usernameOrEmail: string;
 }

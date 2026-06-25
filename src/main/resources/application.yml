@@ -35,6 +35,13 @@ algoj:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
   seed-admin: ${ALGOJ_SEED_ADMIN:false}
 
+bot:
+  # Shared secret the Discord bot sends in X-Bot-Api-Key for /api/internal/**.
+  api-key: ${BOT_API_KEY:}
+
+discord:
+  link-code-ttl-seconds: ${DISCORD_LINK_CODE_TTL_SECONDS:600}
+
 ---
 spring:
   config:

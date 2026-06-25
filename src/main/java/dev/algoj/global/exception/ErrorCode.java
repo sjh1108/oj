@@ -35,7 +35,13 @@ public enum ErrorCode {
 
     // Test case generation
     GENERATOR_FAILED(HttpStatus.BAD_REQUEST, "G001", "테스트케이스 생성기 실행에 실패했습니다."),
-    SOLUTION_FAILED(HttpStatus.BAD_REQUEST, "G002", "모범답안 실행에 실패했습니다.");
+    SOLUTION_FAILED(HttpStatus.BAD_REQUEST, "G002", "모범답안 실행에 실패했습니다."),
+
+    // Discord
+    INVALID_LINK_CODE(HttpStatus.BAD_REQUEST, "D001", "유효하지 않거나 만료된 연동 코드입니다."),
+    DISCORD_ALREADY_LINKED(HttpStatus.CONFLICT, "D002", "이미 다른 계정에 연동된 디스코드 사용자입니다."),
+    DISCORD_NOT_LINKED(HttpStatus.NOT_FOUND, "D003", "연동된 OJ 계정이 없습니다. 먼저 /연동 으로 계정을 연결하세요."),
+    INVALID_BOT_KEY(HttpStatus.UNAUTHORIZED, "D004", "봇 인증에 실패했습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

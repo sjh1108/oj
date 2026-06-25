@@ -2,6 +2,7 @@ package dev.algoj.global.config;
 
 import dev.algoj.global.exception.ErrorCode;
 import dev.algoj.global.exception.ErrorResponse;
+import dev.algoj.global.security.BotApiKeyFilter;
 import dev.algoj.global.security.JwtAuthenticationFilter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final BotApiKeyFilter botApiKeyFilter;
     private final ObjectMapper objectMapper;
 
     @Bean
@@ -50,6 +52,8 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**", "/api/health").permitAll()
+                        // Bot endpoints are not behind JWT — BotApiKeyFilter enforces the API key.
+                        .requestMatchers("/api/internal/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
@@ -70,6 +74,7 @@ public class SecurityConfig {
                                             ErrorResponse.of(ErrorCode.FORBIDDEN)));
                         })
                 )
+                .addFilterBefore(botApiKeyFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

@@ -1,0 +1,17 @@
+{
+  "name": "algoj-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for AlgoJ — /연동 (account link) and /비밀번호분실 (password reset)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "register": "node src/register-commands.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
