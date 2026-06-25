@@ -1,6 +1,8 @@
 import { api } from "@/lib/api";
 import type {
   CreateProblemRequest,
+  GenerateTestCaseRequest,
+  GenerateTestCaseResponse,
   PageResponse,
   ProblemDetailResponse,
   ProblemListItem,
@@ -54,4 +56,9 @@ export const problemsApi = {
     api<void>(`/api/problems/${problemId}/test-cases/${tcId}`, {
       method: "DELETE",
     }),
+  generateTestCase: (problemId: number, body: GenerateTestCaseRequest) =>
+    api<GenerateTestCaseResponse>(
+      `/api/problems/${problemId}/test-cases/generate`,
+      { method: "POST", body },
+    ),
 };

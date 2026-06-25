@@ -1,7 +1,10 @@
 package dev.algoj.domain.problem.controller;
 
+import dev.algoj.domain.problem.dto.GenerateTestCaseRequest;
+import dev.algoj.domain.problem.dto.GenerateTestCaseResponse;
 import dev.algoj.domain.problem.dto.TestCaseRequest;
 import dev.algoj.domain.problem.dto.TestCaseResponse;
+import dev.algoj.domain.problem.service.TestCaseGeneratorService;
 import dev.algoj.domain.problem.service.TestCaseService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,12 +22,21 @@ import java.util.List;
 public class TestCaseController {
 
     private final TestCaseService testCaseService;
+    private final TestCaseGeneratorService testCaseGeneratorService;
 
     @PostMapping
     public ResponseEntity<TestCaseResponse> add(
             @PathVariable Long problemId,
             @Valid @RequestBody TestCaseRequest request) {
         TestCaseResponse response = testCaseService.add(problemId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/generate")
+    public ResponseEntity<GenerateTestCaseResponse> generate(
+            @PathVariable Long problemId,
+            @Valid @RequestBody GenerateTestCaseRequest request) {
+        GenerateTestCaseResponse response = testCaseGeneratorService.generate(problemId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

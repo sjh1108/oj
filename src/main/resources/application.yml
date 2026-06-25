@@ -20,6 +20,10 @@ judge0:
   url: ${JUDGE0_URL}
   connect-timeout-ms: 3000
   read-timeout-ms: 15000
+  generate:
+    # Generous limits for generator / model-solution runs (kept under read-timeout-ms).
+    time-limit-ms: ${JUDGE0_GENERATE_TIME_LIMIT_MS:10000}
+    memory-limit-kb: ${JUDGE0_GENERATE_MEMORY_LIMIT_KB:512000}
 
 jwt:
   secret: ${JWT_SECRET}

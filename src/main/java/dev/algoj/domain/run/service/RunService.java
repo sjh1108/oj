@@ -6,6 +6,7 @@ import dev.algoj.domain.run.dto.RunRequest;
 import dev.algoj.domain.run.dto.RunResponse;
 import dev.algoj.domain.user.entity.User;
 import dev.algoj.global.client.Judge0Client;
+import dev.algoj.global.client.Judge0Results;
 import dev.algoj.global.client.dto.Judge0SubmissionRequest;
 import dev.algoj.global.client.dto.Judge0SubmissionResponse;
 import dev.algoj.global.exception.BusinessException;
@@ -20,8 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class RunService {
-
-    private static final int MAX_ERROR_LENGTH = 2000;
 
     private final ProblemRepository problemRepository;
     private final Judge0Client judge0Client;
@@ -47,38 +46,14 @@ public class RunService {
 
         Judge0SubmissionResponse res = judge0Client.submitAndWait(judge0Req);
 
-        String status = mapStatus(res.status().id());
-        String errorMessage = pickErrorMessage(res);
-
         return new RunResponse(
-                status,
+                Judge0Results.mapStatus(res.status().id()),
                 res.stdout(),
                 res.stderr(),
                 res.compileOutput(),
                 res.runtimeMs(),
                 res.memory(),
-                errorMessage
+                Judge0Results.pickErrorMessage(res)
         );
-    }
-
-    private String mapStatus(int judge0StatusId) {
-        return switch (judge0StatusId) {
-            case 3, 4 -> "OK";
-            case 5 -> "TIME_LIMIT";
-            case 6 -> "COMPILE_ERROR";
-            case 7, 8, 9, 10, 11, 12 -> "RUNTIME_ERROR";
-            default -> "SYSTEM_ERROR";
-        };
-    }
-
-    private String pickErrorMessage(Judge0SubmissionResponse res) {
-        if (res.compileOutput() != null && !res.compileOutput().isBlank()) return truncate(res.compileOutput());
-        if (res.stderr() != null && !res.stderr().isBlank()) return truncate(res.stderr());
-        if (res.message() != null && !res.message().isBlank()) return truncate(res.message());
-        return null;
-    }
-
-    private String truncate(String s) {
-        return s.length() > MAX_ERROR_LENGTH ? s.substring(0, MAX_ERROR_LENGTH) : s;
     }
 }

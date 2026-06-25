@@ -80,6 +80,28 @@ export interface TestCaseRequest {
   isSample: boolean;
 }
 
+export interface GenerateTestCaseRequest {
+  generatorLanguage: Language;
+  generatorCode: string;
+  generatorStdin?: string;
+  solutionLanguage: Language;
+  solutionCode: string;
+  orderIndex: number;
+  isSample: boolean;
+}
+
+export interface GenerateTestCaseResponse {
+  id: number;
+  orderIndex: number;
+  isSample: boolean;
+  inputSize: number;
+  outputSize: number;
+  inputPreview: string;
+  outputPreview: string;
+  generatorRuntimeMs: number | null;
+  solutionRuntimeMs: number | null;
+}
+
 export interface CreateProblemRequest {
   title: string;
   description: string;
