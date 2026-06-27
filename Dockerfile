@@ -26,4 +26,8 @@ RUN apt-get update \
 COPY --from=build /app/build/libs/algoj.jar app.jar
 
 EXPOSE 8080
-ENTRYPOINT ["java", "-Xms200m", "-Xmx400m", "-jar", "app.jar"]
+# Heap is overridable so the deploy can shrink it during the brief blue-green
+# overlap on a memory-tight box. `exec` makes java PID 1 so it receives SIGTERM
+# and shuts down gracefully.
+ENV JAVA_OPTS="-Xms200m -Xmx400m"
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

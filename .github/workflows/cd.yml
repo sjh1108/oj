@@ -144,18 +144,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy compose file to server
+      - name: Copy compose + deploy script to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          source: deploy/docker-compose.prod.yml
+          source: "deploy/docker-compose.prod.yml,deploy/deploy-api.sh"
           target: /opt/algoj/
           strip_components: 1
 
-      - name: Pull image & restart on server
+      - name: Blue-green deploy on server
         uses: appleboy/ssh-action@v1.2.0
         env:
           IMAGE: ${{ env.IMAGE }}
@@ -174,7 +174,8 @@ jobs:
             if [ -n "$GHCR_PAT" ]; then
               echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             fi
-            export IMAGE
-            docker compose -f docker-compose.prod.yml --env-file .env pull
+            # Ensure MySQL is up (compose now manages only MySQL).
             docker compose -f docker-compose.prod.yml --env-file .env up -d
-            docker image prune -f
+            # Blue-green swap the API behind nginx (zero-downtime).
+            chmod +x deploy-api.sh
+            IMAGE="${IMAGE}:latest" bash deploy-api.sh

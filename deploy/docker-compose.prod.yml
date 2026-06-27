@@ -1,11 +1,14 @@
-# Production compose for the Lightsail box.
-# Runs MySQL + the Spring Boot API (pulled from GHCR).
-# Judge0 is assumed to already be running on the host at :2358.
+# Production compose for the Lightsail box — MySQL only.
+# The API is deployed blue-green by deploy/deploy-api.sh (two alternating
+# containers behind nginx), so it is NOT a compose service here. Judge0 is
+# assumed to already be running on the host at :2358.
 #
 # Usage on the box:
-#   export IMAGE=ghcr.io/sjh1108/oj-api      # set by the CD workflow
-#   docker compose -f docker-compose.prod.yml --env-file .env pull
-#   docker compose -f docker-compose.prod.yml --env-file .env up -d
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d   # MySQL
+#   IMAGE=ghcr.io/sjh1108/oj-api:latest bash deploy-api.sh            # API (blue-green)
+#
+# The named network below is shared: deploy-api.sh attaches the API container to
+# `algoj_default` so it can reach MySQL by its service name.
 
 services:
   mysql:
@@ -34,29 +37,10 @@ services:
       timeout: 5s
       retries: 10
 
-  api:
-    image: ${IMAGE:-ghcr.io/sjh1108/oj-api}:latest
-    container_name: algoj-api
-    restart: unless-stopped
-    depends_on:
-      mysql:
-        condition: service_healthy
-    ports:
-      # localhost-only: nginx on the host reverse-proxies to this.
-      - "127.0.0.1:8080:8080"
-    env_file: .env
-    environment:
-      # Overrides for the container network (the .env values target the host).
-      # Reach MySQL via the compose service name instead of 127.0.0.1.
-      DB_HOST: mysql
-      DB_PORT: "3306"
-      # Judge0 runs on the host, not in this compose project.
-      JUDGE0_URL: http://host.docker.internal:2358
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/api/health || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 40s
+# The API is managed by deploy/deploy-api.sh (blue-green), not a compose service.
+
+networks:
+  # Fixed name so deploy-api.sh can `docker run --network algoj_default` reliably,
+  # regardless of the compose project name.
+  default:
+    name: algoj_default

@@ -13,8 +13,13 @@ spring:
   jpa:
     open-in-view: false
 
+  # Let in-flight requests finish before the JVM exits (blue-green drain).
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
 server:
   port: ${SERVER_PORT:8080}
+  shutdown: graceful
 
 judge0:
   url: ${JUDGE0_URL}
