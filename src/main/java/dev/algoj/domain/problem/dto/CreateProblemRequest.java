@@ -33,7 +33,12 @@ public record CreateProblemRequest(
         @NotNull(message = "isPublic은 필수입니다.")
         Boolean isPublic,
 
+        // Flat test cases for problems without subtasks (legacy / simple).
         @Valid
-        List<TestCaseRequest> testCases
+        List<TestCaseRequest> testCases,
+
+        // When non-empty, the problem is graded by subtask (each group all-or-nothing).
+        @Valid
+        List<SubtaskRequest> subtasks
 ) {
 }

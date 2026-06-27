@@ -15,6 +15,8 @@ public record SubmissionResponse(
         Integer memory,
         Integer passedTestCases,
         Integer totalTestCases,
+        Integer score,
+        Integer maxScore,
         Boolean isPublic,
         LocalDateTime createdAt
 ) {
@@ -30,6 +32,8 @@ public record SubmissionResponse(
                 s.getMemory(),
                 s.getPassedTestCases(),
                 s.getTotalTestCases(),
+                s.getScore(),
+                s.getMaxScore(),
                 s.getIsPublic(),
                 s.getCreatedAt()
         );

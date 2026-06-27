@@ -8,11 +8,28 @@ export type SubmissionStatus =
   | "PENDING"
   | "JUDGING"
   | "ACCEPTED"
+  | "PARTIAL"
   | "WRONG_ANSWER"
   | "TIME_LIMIT"
+  | "MEMORY_LIMIT"
   | "COMPILE_ERROR"
   | "RUNTIME_ERROR"
   | "SYSTEM_ERROR";
+
+export interface SubtaskInfo {
+  id: number;
+  label: string;
+  points: number;
+  orderIndex: number;
+}
+
+export interface SubtaskResult {
+  label: string;
+  points: number;
+  earned: number;
+  passed: boolean;
+  status: string;
+}
 
 export interface UserResponse {
   id: number;
@@ -69,6 +86,7 @@ export interface ProblemDetailResponse {
   authorUsername: string | null;
   isPublic: boolean;
   sampleTestCases: TestCaseResponse[];
+  subtasks: SubtaskInfo[];
   createdAt: string;
   updatedAt: string;
 }
@@ -102,6 +120,12 @@ export interface GenerateTestCaseResponse {
   solutionRuntimeMs: number | null;
 }
 
+export interface SubtaskRequest {
+  label?: string;
+  points: number;
+  testCases: TestCaseRequest[];
+}
+
 export interface CreateProblemRequest {
   title: string;
   description: string;
@@ -111,7 +135,8 @@ export interface CreateProblemRequest {
   memoryLimit: number;
   difficulty: Difficulty;
   isPublic: boolean;
-  testCases: TestCaseRequest[];
+  testCases?: TestCaseRequest[];
+  subtasks?: SubtaskRequest[];
 }
 
 export interface SubmitRequest {
@@ -131,6 +156,8 @@ export interface SubmissionResponse {
   memory: number | null;
   passedTestCases: number;
   totalTestCases: number;
+  score: number | null;
+  maxScore: number | null;
   isPublic: boolean;
   createdAt: string;
 }
@@ -138,6 +165,7 @@ export interface SubmissionResponse {
 export interface SubmissionDetailResponse extends SubmissionResponse {
   sourceCode: string;
   errorMessage: string | null;
+  subtaskResults: SubtaskResult[];
 }
 
 export interface VisibilityRequest {

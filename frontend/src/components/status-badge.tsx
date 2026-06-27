@@ -9,8 +9,10 @@ const STATUS_LABEL: Record<SubmissionStatus, string> = {
   PENDING: "대기",
   JUDGING: "채점중",
   ACCEPTED: "정답",
+  PARTIAL: "부분점수",
   WRONG_ANSWER: "오답",
   TIME_LIMIT: "시간초과",
+  MEMORY_LIMIT: "메모리초과",
   COMPILE_ERROR: "컴파일 에러",
   RUNTIME_ERROR: "런타임 에러",
   SYSTEM_ERROR: "시스템 에러",
@@ -20,8 +22,10 @@ const STATUS_CLASS: Record<SubmissionStatus, string> = {
   PENDING: "bg-muted text-foreground",
   JUDGING: "bg-blue-500/15 text-blue-500 border-blue-500/30",
   ACCEPTED: "bg-green-500/15 text-green-500 border-green-500/30",
+  PARTIAL: "bg-amber-500/15 text-amber-500 border-amber-500/30",
   WRONG_ANSWER: "bg-red-500/15 text-red-500 border-red-500/30",
   TIME_LIMIT: "bg-orange-500/15 text-orange-500 border-orange-500/30",
+  MEMORY_LIMIT: "bg-orange-500/15 text-orange-500 border-orange-500/30",
   COMPILE_ERROR: "bg-yellow-500/15 text-yellow-500 border-yellow-500/30",
   RUNTIME_ERROR: "bg-red-500/15 text-red-500 border-red-500/30",
   SYSTEM_ERROR: "bg-red-500/15 text-red-500 border-red-500/30",
@@ -31,18 +35,31 @@ export function StatusBadge({
   status,
   passed,
   total,
+  score,
+  maxScore,
 }: {
   status: SubmissionStatus;
   passed?: number;
   total?: number;
+  score?: number | null;
+  maxScore?: number | null;
 }) {
   const showProgress =
     (status === "PENDING" || status === "JUDGING") &&
     total !== undefined &&
     total > 0;
-  const label = showProgress
-    ? `채점 ${passed ?? 0}/${total}`
-    : STATUS_LABEL[status];
+  // Show the earned score for partial results (and full-score subtask problems).
+  const showScore =
+    (status === "PARTIAL" || status === "ACCEPTED") &&
+    score != null &&
+    maxScore != null &&
+    maxScore > 0;
+
+  let label = STATUS_LABEL[status];
+  if (showProgress) label = `채점 ${passed ?? 0}/${total}`;
+  else if (status === "PARTIAL" && showScore) label = `부분 ${score}/${maxScore}`;
+  else if (status === "ACCEPTED" && showScore && score < maxScore!)
+    label = `${score}/${maxScore}`;
 
   return (
     <Badge variant="outline" className={STATUS_CLASS[status]}>

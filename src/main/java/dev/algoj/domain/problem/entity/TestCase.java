@@ -20,6 +20,11 @@ public class TestCase {
     @JoinColumn(name = "problem_id", nullable = false)
     private Problem problem;
 
+    // Null for legacy problems graded as a single implicit group.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "subtask_id")
+    private Subtask subtask;
+
     @Lob
     @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String input;
@@ -49,6 +54,10 @@ public class TestCase {
 
     void assignProblem(Problem problem) {
         this.problem = problem;
+    }
+
+    public void assignSubtask(Subtask subtask) {
+        this.subtask = subtask;
     }
 
     public void update(String input, String expectedOutput, Integer orderIndex, Boolean isSample) {

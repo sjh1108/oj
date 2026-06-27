@@ -2,6 +2,7 @@ package dev.algoj.domain.problem.service;
 
 import dev.algoj.domain.problem.dto.*;
 import dev.algoj.domain.problem.entity.Problem;
+import dev.algoj.domain.problem.entity.Subtask;
 import dev.algoj.domain.problem.entity.TestCase;
 import dev.algoj.domain.problem.repository.ProblemRepository;
 import dev.algoj.domain.user.entity.User;
@@ -42,15 +43,42 @@ public class ProblemService {
                 .isPublic(req.isPublic())
                 .build();
 
-        Optional.ofNullable(req.testCases()).orElse(List.of()).forEach(tcReq -> {
-            TestCase tc = TestCase.builder()
-                    .input(tcReq.input())
-                    .expectedOutput(tcReq.expectedOutput())
-                    .orderIndex(tcReq.orderIndex())
-                    .isSample(tcReq.isSample())
-                    .build();
-            problem.addTestCase(tc);
-        });
+        List<SubtaskRequest> subtaskReqs = req.subtasks();
+        if (subtaskReqs != null && !subtaskReqs.isEmpty()) {
+            // Subtask mode: each group all-or-nothing; assign a running global orderIndex.
+            int order = 0;
+            for (int i = 0; i < subtaskReqs.size(); i++) {
+                SubtaskRequest stReq = subtaskReqs.get(i);
+                String label = (stReq.label() != null && !stReq.label().isBlank())
+                        ? stReq.label() : "서브태스크 " + (i + 1);
+                Subtask subtask = Subtask.builder()
+                        .label(label)
+                        .points(stReq.points())
+                        .orderIndex(i)
+                        .build();
+                problem.addSubtask(subtask);
+                for (TestCaseRequest tcReq : stReq.testCases()) {
+                    TestCase tc = TestCase.builder()
+                            .input(tcReq.input())
+                            .expectedOutput(tcReq.expectedOutput())
+                            .orderIndex(order++)
+                            .isSample(tcReq.isSample())
+                            .build();
+                    problem.addTestCase(tc);
+                    subtask.addTestCase(tc);
+                }
+            }
+        } else {
+            Optional.ofNullable(req.testCases()).orElse(List.of()).forEach(tcReq -> {
+                TestCase tc = TestCase.builder()
+                        .input(tcReq.input())
+                        .expectedOutput(tcReq.expectedOutput())
+                        .orderIndex(tcReq.orderIndex())
+                        .isSample(tcReq.isSample())
+                        .build();
+                problem.addTestCase(tc);
+            });
+        }
 
         Problem saved = problemRepository.save(problem);
         return ProblemDetailResponse.from(saved);

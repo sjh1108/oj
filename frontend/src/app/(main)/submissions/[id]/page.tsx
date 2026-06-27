@@ -88,6 +88,8 @@ export default function SubmissionDetailPage() {
             status={s.status}
             passed={s.passedTestCases}
             total={s.totalTestCases}
+            score={s.score}
+            maxScore={s.maxScore}
           />
         </div>
         <div className="flex items-center gap-3">
@@ -144,6 +146,49 @@ export default function SubmissionDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {s.maxScore != null && (
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-base">점수</CardTitle>
+            <span className="text-lg font-semibold tabular-nums">
+              {s.score ?? 0} / {s.maxScore}
+            </span>
+          </CardHeader>
+          {s.subtaskResults.length > 0 && (
+            <CardContent>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-muted-foreground">
+                    <th className="py-1 font-medium">서브태스크</th>
+                    <th className="py-1 font-medium">결과</th>
+                    <th className="py-1 text-right font-medium">점수</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {s.subtaskResults.map((st, i) => (
+                    <tr key={i} className="border-t">
+                      <td className="py-1.5">{st.label}</td>
+                      <td className="py-1.5">
+                        <span
+                          className={
+                            st.passed ? "text-green-500" : "text-red-500"
+                          }
+                        >
+                          {st.passed ? "통과" : "실패"}
+                        </span>
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums">
+                        {st.earned} / {st.points}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {isOwner && (
         <Card>

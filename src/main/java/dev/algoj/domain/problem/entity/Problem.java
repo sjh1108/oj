@@ -53,6 +53,10 @@ public class Problem {
     @OneToMany(mappedBy = "problem", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TestCase> testCases = new ArrayList<>();
 
+    @OneToMany(mappedBy = "problem", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("orderIndex ASC")
+    private List<Subtask> subtasks = new ArrayList<>();
+
     @Column(nullable = false)
     private Boolean isPublic;
 
@@ -120,6 +124,11 @@ public class Problem {
     public void addTestCase(TestCase testCase) {
         this.testCases.add(testCase);
         testCase.assignProblem(this);
+    }
+
+    public void addSubtask(Subtask subtask) {
+        this.subtasks.add(subtask);
+        subtask.assignProblem(this);
     }
 
     public boolean removeTestCase(Long testCaseId) {
