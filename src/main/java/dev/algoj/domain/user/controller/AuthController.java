@@ -1,6 +1,7 @@
 package dev.algoj.domain.user.controller;
 
 import dev.algoj.domain.user.dto.LoginRequest;
+import dev.algoj.domain.user.dto.RefreshRequest;
 import dev.algoj.domain.user.dto.SignupRequest;
 import dev.algoj.domain.user.dto.TokenResponse;
 import dev.algoj.domain.user.dto.UserResponse;
@@ -27,5 +28,10 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<TokenResponse> refresh(@Valid @RequestBody RefreshRequest request) {
+        return ResponseEntity.ok(authService.refresh(request));
     }
 }

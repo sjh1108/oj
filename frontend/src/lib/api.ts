@@ -23,29 +23,78 @@ interface RequestOptions extends Omit<RequestInit, "body"> {
   auth?: boolean;
 }
 
+// Single-flight refresh: if many requests 401 at once (e.g. the access token
+// just expired), only one refresh call is made and the rest await it.
+let refreshPromise: Promise<boolean> | null = null;
+
+async function refreshAccessToken(): Promise<boolean> {
+  const refreshToken = useAuthStore.getState().refreshToken;
+  if (!refreshToken) return false;
+
+  // Raw fetch (not api()) so a 401 here can't recurse into another refresh.
+  refreshPromise ??= fetch(`${BASE_URL}/api/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ refreshToken }),
+  })
+    .then(async (res) => {
+      if (!res.ok) return false;
+      const data = (await res.json()) as {
+        accessToken: string;
+        refreshToken: string;
+      };
+      useAuthStore.getState().setTokens({
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+      });
+      return true;
+    })
+    .catch(() => false)
+    .finally(() => {
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
+}
+
 export async function api<T>(
   path: string,
   { body, auth = true, headers, ...rest }: RequestOptions = {},
 ): Promise<T> {
-  const finalHeaders: Record<string, string> = {
-    Accept: "application/json",
-    ...(headers as Record<string, string>),
+  const send = () => {
+    const finalHeaders: Record<string, string> = {
+      Accept: "application/json",
+      ...(headers as Record<string, string>),
+    };
+
+    if (body !== undefined) {
+      finalHeaders["Content-Type"] = "application/json";
+    }
+
+    if (auth) {
+      const token = useAuthStore.getState().accessToken;
+      if (token) finalHeaders["Authorization"] = `Bearer ${token}`;
+    }
+
+    return fetch(`${BASE_URL}${path}`, {
+      ...rest,
+      headers: finalHeaders,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
   };
 
-  if (body !== undefined) {
-    finalHeaders["Content-Type"] = "application/json";
-  }
+  let res = await send();
 
-  if (auth) {
-    const token = useAuthStore.getState().accessToken;
-    if (token) finalHeaders["Authorization"] = `Bearer ${token}`;
+  // Access token likely expired — try a one-time silent refresh, then retry.
+  if (res.status === 401 && auth) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      res = await send();
+    }
+    if (res.status === 401) {
+      useAuthStore.getState().logout();
+    }
   }
-
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...rest,
-    headers: finalHeaders,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
 
   if (res.status === 204) return undefined as T;
 
@@ -53,9 +102,6 @@ export async function api<T>(
   const data = text ? JSON.parse(text) : null;
 
   if (!res.ok) {
-    if (res.status === 401 && auth) {
-      useAuthStore.getState().logout();
-    }
     throw new ApiError(res.status, data as ErrorResponse);
   }
 
