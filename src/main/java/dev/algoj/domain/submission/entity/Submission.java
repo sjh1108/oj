@@ -53,6 +53,16 @@ public class Submission {
     @Column(nullable = false)
     private Integer totalTestCases;
 
+    // Subtask scoring: earned points and the max (sum of subtask points).
+    private Integer score;
+
+    private Integer maxScore;
+
+    // Per-subtask breakdown serialized as JSON for the detail view.
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String subtaskResultsJson;
+
     @Column(nullable = false)
     private Boolean isPublic;
 
@@ -76,7 +86,7 @@ public class Submission {
 
     public enum Status {
         PENDING, JUDGING,
-        ACCEPTED, WRONG_ANSWER, TIME_LIMIT, MEMORY_LIMIT,
+        ACCEPTED, PARTIAL, WRONG_ANSWER, TIME_LIMIT, MEMORY_LIMIT,
         RUNTIME_ERROR, COMPILE_ERROR, SYSTEM_ERROR
     }
 
@@ -122,6 +132,12 @@ public class Submission {
         this.errorMessage = errorMessage;
     }
 
+    public void updateScore(Integer score, Integer maxScore, String subtaskResultsJson) {
+        this.score = score;
+        this.maxScore = maxScore;
+        this.subtaskResultsJson = subtaskResultsJson;
+    }
+
     public void setVisibility(boolean isPublic) {
         this.isPublic = isPublic;
     }
@@ -133,6 +149,9 @@ public class Submission {
         this.runtime = null;
         this.memory = null;
         this.errorMessage = null;
+        this.score = null;
+        this.maxScore = null;
+        this.subtaskResultsJson = null;
     }
 
     @PrePersist

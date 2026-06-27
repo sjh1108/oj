@@ -39,6 +39,12 @@ export interface ParsedTestCase {
   isSample: boolean;
 }
 
+export interface ParsedSubtask {
+  label: string;
+  points: number;
+  testCases: ParsedTestCase[];
+}
+
 export interface ParsedProblem {
   title: string;
   description: string;
@@ -49,6 +55,8 @@ export interface ParsedProblem {
   difficulty: Difficulty;
   isPublic: boolean;
   testCases: ParsedTestCase[];
+  // Present when the file uses an `<!-- @subtasks -->` section.
+  subtasks?: ParsedSubtask[];
 }
 
 const DIFFICULTIES: Difficulty[] = [
@@ -133,6 +141,42 @@ function parseTestCases(region: string): ParsedTestCase[] {
   return cases;
 }
 
+// Parse the `<!-- @subtasks -->` region: each subtask starts at a `## ... points=NN`
+// heading, followed by ~~~input/~~~output test-case fences (same as @testcases).
+function parseSubtasks(region: string): ParsedSubtask[] {
+  if (!region.trim()) return [];
+  const subtasks: ParsedSubtask[] = [];
+  let header: string | null = null;
+  let body: string[] = [];
+
+  const flush = () => {
+    if (header === null) return;
+    const pm = header.match(/points\s*=\s*(\d+)/i) ?? header.match(/(\d+)/);
+    const points = pm ? parseInt(pm[1], 10) : 0;
+    let label = header
+      .replace(/points\s*=\s*\d+/i, "")
+      .replace(/[|[\]]/g, " ")
+      .trim();
+    if (!label) label = `서브태스크 ${subtasks.length + 1}`;
+    const testCases = parseTestCases(body.join("\n"));
+    if (testCases.length > 0) subtasks.push({ label, points, testCases });
+    header = null;
+    body = [];
+  };
+
+  for (const line of region.split("\n")) {
+    const h = line.match(/^##\s+(.*)$/);
+    if (h) {
+      flush();
+      header = h[1].trim();
+    } else if (header !== null) {
+      body.push(line);
+    }
+  }
+  flush();
+  return subtasks;
+}
+
 /** Parse a single-file problem (.md). Throws Error with a Korean message on bad input. */
 export function parseProblemFile(raw: string): ParsedProblem {
   const text = raw.replace(/^﻿/, "").replace(/\r\n/g, "\n");
@@ -180,6 +224,8 @@ export function parseProblemFile(raw: string): ParsedProblem {
     DIFFICULTIES.includes(diff as Difficulty) ? diff : "BRONZE"
   ) as Difficulty;
 
+  const subtasks = parseSubtasks(sections.subtasks ?? "");
+
   return {
     title,
     description,
@@ -190,6 +236,7 @@ export function parseProblemFile(raw: string): ParsedProblem {
     difficulty,
     isPublic: !/^(false|no|0)$/i.test(meta.ispublic ?? "true"),
     testCases: parseTestCases(sections.testcases ?? ""),
+    subtasks: subtasks.length > 0 ? subtasks : undefined,
   };
 }
 

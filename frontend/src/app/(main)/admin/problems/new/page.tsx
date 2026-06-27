@@ -4,7 +4,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Controller, useFieldArray, useForm } from "react-hook-form";
+import {
+  Controller,
+  useFieldArray,
+  useForm,
+  type UseFormReturn,
+} from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -27,30 +32,59 @@ const tcSchema = z.object({
   isSample: z.boolean(),
 });
 
-const schema = z.object({
-  title: z
-    .string()
-    .min(1, { error: "제목을 입력하세요" })
-    .max(200, { error: "200자 이하" }),
-  description: z.string().min(1, { error: "설명을 입력하세요" }),
-  inputDescription: z.string(),
-  outputDescription: z.string(),
-  timeLimit: z
-    .number({ error: "숫자를 입력하세요" })
-    .min(0.1, { error: "0.1s 이상" })
-    .max(60, { error: "60s 이하" }),
-  memoryLimit: z
-    .number({ error: "숫자를 입력하세요" })
-    .min(1, { error: "1MB 이상" })
-    .max(1024, { error: "1024MB 이하" }),
-  difficulty: z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM", "DIAMOND"]),
-  isPublic: z.boolean(),
-  testCases: z
-    .array(tcSchema)
-    .min(1, { error: "테스트케이스를 최소 1개 추가하세요" }),
+const subtaskSchema = z.object({
+  label: z.string(),
+  points: z
+    .number({ error: "숫자" })
+    .min(0, { error: "0 이상" })
+    .max(1000, { error: "1000 이하" }),
+  testCases: z.array(tcSchema).min(1, { error: "TC를 최소 1개 추가하세요" }),
 });
 
+const schema = z
+  .object({
+    title: z
+      .string()
+      .min(1, { error: "제목을 입력하세요" })
+      .max(200, { error: "200자 이하" }),
+    description: z.string().min(1, { error: "설명을 입력하세요" }),
+    inputDescription: z.string(),
+    outputDescription: z.string(),
+    timeLimit: z
+      .number({ error: "숫자를 입력하세요" })
+      .min(0.1, { error: "0.1s 이상" })
+      .max(60, { error: "60s 이하" }),
+    memoryLimit: z
+      .number({ error: "숫자를 입력하세요" })
+      .min(1, { error: "1MB 이상" })
+      .max(1024, { error: "1024MB 이하" }),
+    difficulty: z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM", "DIAMOND"]),
+    isPublic: z.boolean(),
+    useSubtasks: z.boolean(),
+    testCases: z.array(tcSchema),
+    subtasks: z.array(subtaskSchema),
+  })
+  .superRefine((v, ctx) => {
+    if (v.useSubtasks) {
+      if (v.subtasks.length < 1)
+        ctx.addIssue({
+          code: "custom",
+          path: ["subtasks"],
+          message: "서브태스크를 최소 1개 추가하세요",
+        });
+    } else if (v.testCases.length < 1) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["testCases"],
+        message: "테스트케이스를 최소 1개 추가하세요",
+      });
+    }
+  });
+
 type FormValues = z.infer<typeof schema>;
+
+const EMPTY_TC = { input: "", expectedOutput: "", isSample: false };
+const FIRST_TC = { input: "", expectedOutput: "", isSample: true };
 
 const DIFFICULTIES: { value: Difficulty; label: string }[] = [
   { value: "BRONZE", label: "브론즈" },
@@ -82,13 +116,30 @@ export default function NewProblemPage() {
       memoryLimit: 256,
       difficulty: "BRONZE",
       isPublic: true,
-      testCases: [
-        { input: "", expectedOutput: "", isSample: true },
-      ],
+      useSubtasks: false,
+      testCases: [{ ...FIRST_TC }],
+      subtasks: [],
     },
   });
 
   const tcs = useFieldArray({ control: form.control, name: "testCases" });
+  const stcs = useFieldArray({ control: form.control, name: "subtasks" });
+  const useSubtasks = form.watch("useSubtasks");
+
+  const setUseSubtasks = (on: boolean) => {
+    form.setValue("useSubtasks", on);
+    if (on) {
+      tcs.replace([]);
+      if (form.getValues("subtasks").length === 0) {
+        stcs.append({ label: "", points: 100, testCases: [{ ...FIRST_TC }] });
+      }
+    } else {
+      stcs.replace([]);
+      if (form.getValues("testCases").length === 0) {
+        tcs.append({ ...FIRST_TC });
+      }
+    }
+  };
 
   const mutation = useMutation({
     mutationFn: (body: CreateProblemRequest) => problemsApi.create(body),
@@ -99,9 +150,7 @@ export default function NewProblemPage() {
     onError: (err) => {
       if (err instanceof ApiError) {
         if (err.fieldErrors?.length) {
-          for (const fe of err.fieldErrors) {
-            toast.error(`${fe.field}: ${fe.message}`);
-          }
+          for (const fe of err.fieldErrors) toast.error(`${fe.field}: ${fe.message}`);
         } else {
           toast.error(err.message);
         }
@@ -114,7 +163,7 @@ export default function NewProblemPage() {
   const loadFromFile = async (file: File) => {
     try {
       const parsed = parseProblemFile(await file.text());
-      form.reset({
+      const common = {
         title: parsed.title,
         description: parsed.description,
         inputDescription: parsed.inputDescription,
@@ -123,32 +172,83 @@ export default function NewProblemPage() {
         memoryLimit: parsed.memoryLimit,
         difficulty: parsed.difficulty,
         isPublic: parsed.isPublic,
-        testCases: parsed.testCases.length
-          ? parsed.testCases
-          : [{ input: "", expectedOutput: "", isSample: true }],
-      });
-      toast.success(
-        `파일을 불러왔습니다 · 테스트케이스 ${parsed.testCases.length}개`,
-      );
+      };
+      if (parsed.subtasks && parsed.subtasks.length > 0) {
+        form.reset({
+          ...common,
+          useSubtasks: true,
+          testCases: [],
+          subtasks: parsed.subtasks.map((st) => ({
+            label: st.label,
+            points: st.points,
+            testCases: st.testCases.map((tc) => ({
+              input: tc.input,
+              expectedOutput: tc.expectedOutput,
+              isSample: tc.isSample,
+            })),
+          })),
+        });
+        toast.success(`파일을 불러왔습니다 · 서브태스크 ${parsed.subtasks.length}개`);
+      } else {
+        form.reset({
+          ...common,
+          useSubtasks: false,
+          subtasks: [],
+          testCases: parsed.testCases.length
+            ? parsed.testCases.map((tc) => ({
+                input: tc.input,
+                expectedOutput: tc.expectedOutput,
+                isSample: tc.isSample,
+              }))
+            : [{ ...FIRST_TC }],
+        });
+        toast.success(`파일을 불러왔습니다 · 테스트케이스 ${parsed.testCases.length}개`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "파일 파싱에 실패했습니다");
     }
   };
 
   const onSubmit = (values: FormValues) => {
-    const payload: CreateProblemRequest = {
-      ...values,
+    const base = {
+      title: values.title,
+      description: values.description,
+      inputDescription: values.inputDescription,
+      outputDescription: values.outputDescription,
       timeLimit: Math.round(values.timeLimit * 1000),
       memoryLimit: Math.round(values.memoryLimit * 1024),
-      testCases: values.testCases.map((tc, i) => ({
-        ...tc,
-        orderIndex: i,
-      })),
+      difficulty: values.difficulty,
+      isPublic: values.isPublic,
     };
+    let payload: CreateProblemRequest;
+    if (values.useSubtasks) {
+      let order = 0;
+      payload = {
+        ...base,
+        subtasks: values.subtasks.map((st, i) => ({
+          label: st.label?.trim() || `서브태스크 ${i + 1}`,
+          points: st.points,
+          testCases: st.testCases.map((tc) => ({ ...tc, orderIndex: order++ })),
+        })),
+      };
+    } else {
+      payload = {
+        ...base,
+        testCases: values.testCases.map((tc, i) => ({ ...tc, orderIndex: i })),
+      };
+    }
     mutation.mutate(payload);
   };
 
   if (!user || user.role !== "ADMIN") return null;
+
+  const subtaskErr = form.formState.errors.subtasks;
+  const subtaskMsg =
+    typeof subtaskErr?.message === "string"
+      ? subtaskErr.message
+      : typeof subtaskErr?.root?.message === "string"
+        ? subtaskErr.root.message
+        : null;
 
   return (
     <main className="max-w-6xl mx-auto p-6">
@@ -162,9 +262,7 @@ export default function NewProblemPage() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() =>
-                downloadTextFile("problem-template.md", PROBLEM_TEMPLATE)
-              }
+              onClick={() => downloadTextFile("problem-template.md", PROBLEM_TEMPLATE)}
             >
               템플릿 다운로드
             </Button>
@@ -172,7 +270,8 @@ export default function NewProblemPage() {
           <CardContent className="space-y-2">
             <p className="text-sm text-muted-foreground">
               <code className="text-xs">.md</code> 문제 파일을 올리면 제목·설명·제약·테스트케이스가
-              아래 폼에 자동으로 채워집니다. 형식은 템플릿을 참고하세요. (업로드 후 폼에서 수정 가능)
+              아래 폼에 자동으로 채워집니다. <code className="text-xs">{"<!-- @subtasks -->"}</code> 섹션이
+              있으면 서브태스크로 불러옵니다. (업로드 후 폼에서 수정 가능)
             </p>
             <Input
               type="file"
@@ -334,104 +433,137 @@ export default function NewProblemPage() {
 
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-base">테스트케이스</CardTitle>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                tcs.append({ input: "", expectedOutput: "", isSample: false })
-              }
-            >
-              + 추가
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {tcs.fields.map((field, idx) => (
-              <div
-                key={field.id}
-                className="border rounded-lg p-4 space-y-3 relative"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">TC #{idx + 1}</span>
-                  <div className="flex items-center gap-3">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
-                        {...form.register(`testCases.${idx}.isSample`)}
-                        className="size-4 rounded border-input"
-                      />
-                      샘플 (사용자 노출)
-                    </label>
-                    {tcs.fields.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => tcs.remove(idx)}
-                      >
-                        삭제
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label className="text-xs">입력</Label>
-                    <Textarea
-                      rows={4}
-                      {...form.register(`testCases.${idx}.input`)}
-                    />
-                    {form.formState.errors.testCases?.[idx]?.input && (
-                      <p className="text-sm text-destructive">
-                        {form.formState.errors.testCases[idx]?.input?.message}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">예상 출력</Label>
-                    <Textarea
-                      rows={4}
-                      {...form.register(`testCases.${idx}.expectedOutput`)}
-                    />
-                    {form.formState.errors.testCases?.[idx]?.expectedOutput && (
-                      <p className="text-sm text-destructive">
-                        {
-                          form.formState.errors.testCases[idx]?.expectedOutput
-                            ?.message
-                        }
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-            {form.formState.errors.testCases?.root && (
-              <p className="text-sm text-destructive">
-                {form.formState.errors.testCases.root.message}
-              </p>
-            )}
-            <div className="flex justify-center pt-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              <CardTitle className="text-base">테스트케이스</CardTitle>
+              <label className="flex items-center gap-2 text-sm cursor-pointer text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={useSubtasks}
+                  onChange={(e) => setUseSubtasks(e.target.checked)}
+                  className="size-4 rounded border-input"
+                />
+                서브태스크(부분 점수) 사용
+              </label>
+            </div>
+            {useSubtasks ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() =>
-                  tcs.append({ input: "", expectedOutput: "", isSample: false })
+                  stcs.append({
+                    label: "",
+                    points: 0,
+                    testCases: [{ ...EMPTY_TC }],
+                  })
                 }
               >
-                + TC 추가
+                + 서브태스크
               </Button>
-            </div>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => tcs.append({ ...EMPTY_TC })}
+              >
+                + 추가
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {useSubtasks ? (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  각 서브태스크는 <b>전부 통과해야</b> 배점을 얻습니다(부분 점수). 배점 합은 보통 100.
+                </p>
+                {stcs.fields.map((field, sIdx) => (
+                  <SubtaskGroup
+                    key={field.id}
+                    form={form}
+                    sIdx={sIdx}
+                    removable={stcs.fields.length > 1}
+                    onRemove={() => stcs.remove(sIdx)}
+                  />
+                ))}
+                {subtaskMsg && (
+                  <p className="text-sm text-destructive">{subtaskMsg}</p>
+                )}
+              </>
+            ) : (
+              <>
+                {tcs.fields.map((field, idx) => (
+                  <div key={field.id} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">TC #{idx + 1}</span>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            {...form.register(`testCases.${idx}.isSample`)}
+                            className="size-4 rounded border-input"
+                          />
+                          샘플 (사용자 노출)
+                        </label>
+                        {tcs.fields.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => tcs.remove(idx)}
+                          >
+                            삭제
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label className="text-xs">입력</Label>
+                        <Textarea rows={4} {...form.register(`testCases.${idx}.input`)} />
+                        {form.formState.errors.testCases?.[idx]?.input && (
+                          <p className="text-sm text-destructive">
+                            {form.formState.errors.testCases[idx]?.input?.message}
+                          </p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs">예상 출력</Label>
+                        <Textarea
+                          rows={4}
+                          {...form.register(`testCases.${idx}.expectedOutput`)}
+                        />
+                        {form.formState.errors.testCases?.[idx]?.expectedOutput && (
+                          <p className="text-sm text-destructive">
+                            {form.formState.errors.testCases[idx]?.expectedOutput?.message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {form.formState.errors.testCases?.root && (
+                  <p className="text-sm text-destructive">
+                    {form.formState.errors.testCases.root.message}
+                  </p>
+                )}
+                <div className="flex justify-center pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => tcs.append({ ...EMPTY_TC })}
+                  >
+                    + TC 추가
+                  </Button>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
         <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => router.back()}
-          >
+          <Button type="button" variant="outline" onClick={() => router.back()}>
             취소
           </Button>
           <Button type="submit" disabled={mutation.isPending}>
@@ -440,5 +572,116 @@ export default function NewProblemPage() {
         </div>
       </form>
     </main>
+  );
+}
+
+function SubtaskGroup({
+  form,
+  sIdx,
+  removable,
+  onRemove,
+}: {
+  form: UseFormReturn<FormValues>;
+  sIdx: number;
+  removable: boolean;
+  onRemove: () => void;
+}) {
+  const tcs = useFieldArray({
+    control: form.control,
+    name: `subtasks.${sIdx}.testCases`,
+  });
+  const errors = form.formState.errors;
+  const pointsErr = errors.subtasks?.[sIdx]?.points?.message;
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-semibold">서브태스크 {sIdx + 1}</span>
+          <Input
+            className="h-8 w-44"
+            placeholder="라벨 (선택)"
+            {...form.register(`subtasks.${sIdx}.label`)}
+          />
+          <div className="flex items-center gap-1">
+            <Input
+              className="h-8 w-20"
+              type="number"
+              min="0"
+              {...form.register(`subtasks.${sIdx}.points`, { valueAsNumber: true })}
+            />
+            <span className="text-sm text-muted-foreground">점</span>
+          </div>
+        </div>
+        {removable && (
+          <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
+            그룹 삭제
+          </Button>
+        )}
+      </div>
+      {pointsErr && <p className="text-sm text-destructive">{pointsErr}</p>}
+
+      {tcs.fields.map((field, idx) => (
+        <div key={field.id} className="border rounded-md p-3 space-y-2 bg-background">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium">TC #{idx + 1}</span>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  {...form.register(`subtasks.${sIdx}.testCases.${idx}.isSample`)}
+                  className="size-4 rounded border-input"
+                />
+                샘플
+              </label>
+              {tcs.fields.length > 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => tcs.remove(idx)}
+                >
+                  삭제
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Textarea
+                rows={3}
+                placeholder="입력"
+                {...form.register(`subtasks.${sIdx}.testCases.${idx}.input`)}
+              />
+              {errors.subtasks?.[sIdx]?.testCases?.[idx]?.input && (
+                <p className="text-sm text-destructive">
+                  {errors.subtasks[sIdx]?.testCases?.[idx]?.input?.message}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1">
+              <Textarea
+                rows={3}
+                placeholder="예상 출력"
+                {...form.register(`subtasks.${sIdx}.testCases.${idx}.expectedOutput`)}
+              />
+              {errors.subtasks?.[sIdx]?.testCases?.[idx]?.expectedOutput && (
+                <p className="text-sm text-destructive">
+                  {errors.subtasks[sIdx]?.testCases?.[idx]?.expectedOutput?.message}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => tcs.append({ input: "", expectedOutput: "", isSample: false })}
+      >
+        + TC 추가
+      </Button>
+    </div>
   );
 }

@@ -19,6 +19,7 @@ public record ProblemDetailResponse(
         String authorUsername,
         Boolean isPublic,
         List<TestCaseResponse> sampleTestCases,
+        List<SubtaskInfoResponse> subtasks,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -27,6 +28,10 @@ public record ProblemDetailResponse(
                 .filter(TestCase::getIsSample)
                 .sorted(Comparator.comparing(TestCase::getOrderIndex))
                 .map(TestCaseResponse::from)
+                .toList();
+        List<SubtaskInfoResponse> subtasks = p.getSubtasks().stream()
+                .sorted(Comparator.comparing(dev.algoj.domain.problem.entity.Subtask::getOrderIndex))
+                .map(SubtaskInfoResponse::from)
                 .toList();
         return new ProblemDetailResponse(
                 p.getId(),
@@ -40,6 +45,7 @@ public record ProblemDetailResponse(
                 p.getAuthor() != null ? p.getAuthor().getUsername() : null,
                 p.getIsPublic(),
                 samples,
+                subtasks,
                 p.getCreatedAt(),
                 p.getUpdatedAt()
         );

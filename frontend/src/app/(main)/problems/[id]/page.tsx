@@ -333,6 +333,16 @@ export default function ProblemDetailPage() {
             {!p.isPublic && " · 비공개"}
           </div>
 
+          {p.subtasks.length > 0 && (
+            <div className="text-sm text-muted-foreground">
+              서브태스크{" "}
+              {p.subtasks
+                .map((st) => `${st.label}(${st.points}점)`)
+                .join(" · ")}{" "}
+              — 총 {p.subtasks.reduce((a, st) => a + st.points, 0)}점
+            </div>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">문제 설명</CardTitle>
