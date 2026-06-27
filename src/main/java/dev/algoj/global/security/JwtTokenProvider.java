@@ -93,6 +93,15 @@ public class JwtTokenProvider {
         return Long.parseLong(parseClaims(token).getSubject());
     }
 
+    /** Returns the "type" claim ("access" or "refresh"); throws on invalid/expired token. */
+    public String getType(String token) {
+        return parseClaims(token).get(CLAIM_TYPE, String.class);
+    }
+
+    public boolean isRefreshToken(String token) {
+        return TYPE_REFRESH.equals(getType(token));
+    }
+
     public long getAccessTokenValidity() {
         return accessTokenValidity;
     }

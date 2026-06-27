@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, Play, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { problemsApi } from "@/lib/problems-api";
@@ -82,6 +82,39 @@ export default function ProblemDetailPage() {
 
   const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE);
   const [code, setCode] = useState<string>(STARTER[DEFAULT_LANGUAGE]);
+
+  // Per-problem, per-language draft persisted in localStorage so in-progress code
+  // survives session drops, refreshes, or accidental navigation.
+  const draftKey = (lang: Language) => `algoj-draft:${id}:${lang}`;
+
+  const readDraft = (lang: Language): string | null => {
+    if (typeof window === "undefined" || !Number.isFinite(id)) return null;
+    return window.localStorage.getItem(draftKey(lang));
+  };
+
+  const writeDraft = (lang: Language, value: string) => {
+    if (typeof window === "undefined" || !Number.isFinite(id)) return;
+    // Don't persist the pristine starter template — keep "no draft" meaning no draft.
+    if (value === STARTER[lang]) window.localStorage.removeItem(draftKey(lang));
+    else window.localStorage.setItem(draftKey(lang), value);
+  };
+
+  // Restore the saved draft for the current language when the problem changes.
+  useEffect(() => {
+    setCode(readDraft(language) ?? STARTER[language]);
+    // Intentionally keyed on `id` only; language switches are handled inline below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const handleCodeChange = (value: string) => {
+    setCode(value);
+    writeDraft(language, value);
+  };
+
+  const handleLanguageChange = (lang: Language) => {
+    setLanguage(lang);
+    setCode(readDraft(lang) ?? STARTER[lang]);
+  };
 
   const copyToClipboard = async (text: string, label: string) => {
     try {
@@ -628,11 +661,7 @@ export default function ProblemDetailPage() {
           <div className="flex items-center justify-between gap-3">
             <select
               value={language}
-              onChange={(e) => {
-                const lang = e.target.value as Language;
-                setLanguage(lang);
-                setCode(STARTER[lang]);
-              }}
+              onChange={(e) => handleLanguageChange(e.target.value as Language)}
               className="h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               {LANGUAGES.map((l) => (
@@ -653,7 +682,7 @@ export default function ProblemDetailPage() {
           <CodeEditor
             language={language}
             value={code}
-            onChange={setCode}
+            onChange={handleCodeChange}
             height="600px"
           />
         </section>

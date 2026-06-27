@@ -2,6 +2,7 @@ package dev.algoj.domain.user.service;
 
 import dev.algoj.domain.user.dto.ChangePasswordRequest;
 import dev.algoj.domain.user.dto.LoginRequest;
+import dev.algoj.domain.user.dto.RefreshRequest;
 import dev.algoj.domain.user.dto.SignupRequest;
 import dev.algoj.domain.user.dto.TokenResponse;
 import dev.algoj.domain.user.dto.UserResponse;
@@ -54,6 +55,24 @@ public class AuthService {
         }
 
         String accessToken = jwtTokenProvider.createAccessToken(user);
+        String refreshToken = jwtTokenProvider.createRefreshToken(user);
+        return TokenResponse.of(accessToken, refreshToken, jwtTokenProvider.getAccessTokenValidity());
+    }
+
+    @Transactional(readOnly = true)
+    public TokenResponse refresh(RefreshRequest request) {
+        // parseClaims throws EXPIRED_TOKEN / INVALID_TOKEN (401) on expired or forged tokens.
+        if (!jwtTokenProvider.isRefreshToken(request.refreshToken())) {
+            // Reject access tokens (or any non-refresh type) used at the refresh endpoint.
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+
+        Long userId = jwtTokenProvider.getUserId(request.refreshToken());
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        String accessToken = jwtTokenProvider.createAccessToken(user);
+        // Rotate the refresh token too — keeps active users on a sliding 7-day window.
         String refreshToken = jwtTokenProvider.createRefreshToken(user);
         return TokenResponse.of(accessToken, refreshToken, jwtTokenProvider.getAccessTokenValidity());
     }
