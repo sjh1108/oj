@@ -8,6 +8,11 @@ import { toast } from "sonner";
 import { submissionsApi } from "@/lib/submissions-api";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api";
+import {
+  downloadTextFile,
+  LANGUAGE_EXTENSION,
+  sanitizeFilename,
+} from "@/lib/download";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeEditor } from "@/components/code-editor";
@@ -178,8 +183,20 @@ export default function SubmissionDetailPage() {
       )}
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="text-base">소스 코드</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              downloadTextFile(
+                `${s.problemId}_${sanitizeFilename(s.problemTitle)}.${LANGUAGE_EXTENSION[s.language]}`,
+                s.sourceCode,
+              )
+            }
+          >
+            코드 다운로드
+          </Button>
         </CardHeader>
         <CardContent>
           <CodeEditor

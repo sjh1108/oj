@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Play, Plus, Trash2 } from "lucide-react";
+import { Copy, Download, Play, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -20,6 +20,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { downloadTextFile, sanitizeFilename } from "@/lib/download";
+import { buildProblemMarkdown } from "@/lib/problem-file";
 import { CodeEditor } from "@/components/code-editor";
 import { Markdown } from "@/components/markdown";
 import { DifficultyBadge } from "@/components/status-badge";
@@ -280,33 +282,50 @@ export default function ProblemDetailPage() {
               </h1>
               <DifficultyBadge difficulty={p.difficulty} />
             </div>
-            {isAdmin && (
-              <div className="flex gap-3 items-center">
-                <Link
-                  href={`/admin/problems/${p.id}/edit`}
-                  className="text-sm text-muted-foreground hover:text-foreground underline"
-                >
-                  수정
-                </Link>
-                <Link
-                  href={`/admin/problems/${p.id}/test-cases`}
-                  className="text-sm text-muted-foreground hover:text-foreground underline"
-                >
-                  TC 관리
-                </Link>
-                <button
-                  className="text-sm text-destructive hover:underline"
-                  onClick={() => {
-                    if (confirm(`#${p.id} ${p.title} 문제를 삭제할까요?`)) {
-                      remove.mutate();
-                    }
-                  }}
-                  disabled={remove.isPending}
-                >
-                  삭제
-                </button>
-              </div>
-            )}
+            <div className="flex gap-3 items-center">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  downloadTextFile(
+                    `${p.id}_${sanitizeFilename(p.title)}.md`,
+                    buildProblemMarkdown(p),
+                    "text/markdown;charset=utf-8",
+                  )
+                }
+              >
+                <Download className="size-4 mr-1" />
+                문제 다운로드
+              </Button>
+              {isAdmin && (
+                <>
+                  <Link
+                    href={`/admin/problems/${p.id}/edit`}
+                    className="text-sm text-muted-foreground hover:text-foreground underline"
+                  >
+                    수정
+                  </Link>
+                  <Link
+                    href={`/admin/problems/${p.id}/test-cases`}
+                    className="text-sm text-muted-foreground hover:text-foreground underline"
+                  >
+                    TC 관리
+                  </Link>
+                  <button
+                    className="text-sm text-destructive hover:underline"
+                    onClick={() => {
+                      if (confirm(`#${p.id} ${p.title} 문제를 삭제할까요?`)) {
+                        remove.mutate();
+                      }
+                    }}
+                    disabled={remove.isPending}
+                  >
+                    삭제
+                  </button>
+                </>
+              )}
+            </div>
           </div>
           <div className="text-sm text-muted-foreground">
             시간 제한 {(p.timeLimit / 1000).toLocaleString("ko-KR", { maximumFractionDigits: 3 })}초 · 메모리 {Math.round(p.memoryLimit / 1024).toLocaleString("ko-KR")}MB
