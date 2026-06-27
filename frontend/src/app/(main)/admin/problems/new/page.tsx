@@ -11,6 +11,8 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api";
 import { problemsApi } from "@/lib/problems-api";
 import { useAuthStore } from "@/lib/auth-store";
+import { downloadTextFile } from "@/lib/download";
+import { parseProblemFile, PROBLEM_TEMPLATE } from "@/lib/problem-file";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -109,6 +111,30 @@ export default function NewProblemPage() {
     },
   });
 
+  const loadFromFile = async (file: File) => {
+    try {
+      const parsed = parseProblemFile(await file.text());
+      form.reset({
+        title: parsed.title,
+        description: parsed.description,
+        inputDescription: parsed.inputDescription,
+        outputDescription: parsed.outputDescription,
+        timeLimit: parsed.timeLimit,
+        memoryLimit: parsed.memoryLimit,
+        difficulty: parsed.difficulty,
+        isPublic: parsed.isPublic,
+        testCases: parsed.testCases.length
+          ? parsed.testCases
+          : [{ input: "", expectedOutput: "", isSample: true }],
+      });
+      toast.success(
+        `파일을 불러왔습니다 · 테스트케이스 ${parsed.testCases.length}개`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "파일 파싱에 실패했습니다");
+    }
+  };
+
   const onSubmit = (values: FormValues) => {
     const payload: CreateProblemRequest = {
       ...values,
@@ -129,6 +155,37 @@ export default function NewProblemPage() {
       <h1 className="text-2xl font-semibold mb-6">문제 출제</h1>
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <Card>
+          <CardHeader className="flex-row items-center justify-between">
+            <CardTitle className="text-base">파일로 채우기 (선택)</CardTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                downloadTextFile("problem-template.md", PROBLEM_TEMPLATE)
+              }
+            >
+              템플릿 다운로드
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              <code className="text-xs">.md</code> 문제 파일을 올리면 제목·설명·제약·테스트케이스가
+              아래 폼에 자동으로 채워집니다. 형식은 템플릿을 참고하세요. (업로드 후 폼에서 수정 가능)
+            </p>
+            <Input
+              type="file"
+              accept=".md,.markdown,.txt,text/markdown,text/plain"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) loadFromFile(file);
+                e.target.value = "";
+              }}
+            />
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-base">기본 정보</CardTitle>
