@@ -24,6 +24,8 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
+        // Hibernate builds the H2 schema here; the Flyway baseline is MySQL-only DDL.
+        "spring.flyway.enabled=false",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "algoj.seed-admin=false",
 })

@@ -12,6 +12,15 @@ spring:
 
   jpa:
     open-in-view: false
+    # Flyway owns the schema (db/migration); Hibernate only checks it matches.
+    hibernate:
+      ddl-auto: validate
+
+  flyway:
+    # Pre-Flyway databases (prod/dev with existing tables) get stamped as
+    # already at V1 on first boot; only empty databases actually run V1.
+    baseline-on-migrate: true
+    baseline-version: 1
 
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
@@ -70,8 +79,7 @@ spring:
       on-profile: dev
 
   jpa:
-    hibernate:
-      ddl-auto: update
+    # Schema changes go through Flyway migrations now (no more ddl-auto: update).
     properties:
       hibernate:
         format_sql: true
@@ -91,10 +99,6 @@ spring:
   config:
     activate:
       on-profile: prod
-
-  jpa:
-    hibernate:
-      ddl-auto: validate
 
 logging:
   level:

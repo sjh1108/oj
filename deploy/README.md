@@ -293,6 +293,30 @@ IMAGE=ghcr.io/sjh1108/oj-api:latest bash deploy-api.sh
 
 ---
 
+## DB 마이그레이션 (Flyway)
+
+스키마는 **Flyway**가 관리한다. 이제 `.env`에 `SPRING_JPA_HIBERNATE_DDL_AUTO=update`를
+임시로 넣거나 서버에서 SQL을 직접 치는 방식(위 구버전 안내들)은 쓰지 않는다.
+
+- 마이그레이션 파일: `src/main/resources/db/migration/V<N>__<설명>.sql`
+- 앱이 **부팅할 때** `flyway_schema_history` 테이블과 대조해 빠진 버전만 순서대로 적용한다.
+  배포 = 머지, 별도 서버 작업 없음.
+- 한 번 적용된 파일은 체크섬으로 잠긴다 — 수정하지 말고 항상 **새 버전 파일을 추가**할 것.
+- `V1__baseline.sql`은 Flyway 도입 시점의 스키마다. **기존 DB(프로드/로컬)는 첫 부팅 때
+  baseline-on-migrate로 "이미 V1" 도장만 찍히고 V1은 실행되지 않는다** — 그 뒤 V2부터
+  순서대로 적용된다. 빈 DB(새 로컬, CI)에서만 V1부터 전부 실행된다.
+- Hibernate는 모든 프로필에서 `ddl-auto=validate`: 엔티티와 DB가 어긋나면 부팅이 실패한다
+  (블루-그린이라 구버전이 계속 서빙됨).
+
+### 새 스키마 변경을 만들 때
+
+1. 엔티티 수정
+2. `SchemaDdlGenerator` 테스트를 돌려 `build/baseline-ddl.sql`(전체 DDL)을 뽑고,
+   바뀐 부분만 `V2__...sql` 같은 새 파일로 작성
+3. 커밋 → 머지하면 배포 시 자동 적용
+
+---
+
 ## Discord 봇 (선택) — 비밀번호 분실 / 계정 연동
 
 회원이 디스코드에서 `/비밀번호분실` 로 임시 비밀번호를 받고(`/연동` 으로 미리 계정 연결),
