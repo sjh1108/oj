@@ -14,4 +14,7 @@ export const commands = [
   new SlashCommandBuilder()
     .setName("비밀번호분실")
     .setDescription("연동된 OJ 계정의 임시 비밀번호를 발급받습니다. (본인만 볼 수 있음)"),
+  new SlashCommandBuilder()
+    .setName("서버상태")
+    .setDescription("OJ 서버 상태를 확인합니다. (DB · 채점 큐 · Judge0 · 제출 현황)"),
 ].map((c) => c.toJSON());
