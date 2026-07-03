@@ -13,6 +13,22 @@ spring:
   jpa:
     open-in-view: false
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        # Judge0 shares the box — keep judge parallelism modest.
+        concurrency: ${JUDGE_WORKER_CONCURRENCY:2}
+        max-concurrency: ${JUDGE_WORKER_MAX_CONCURRENCY:4}
+        # One unacked message per worker so a second API container (blue-green
+        # overlap) can pick up queued work immediately.
+        prefetch: 1
+        # Rejected messages go to the DLQ (see RabbitConfig), never back on the queue.
+        default-requeue-rejected: false
+
   # Let in-flight requests finish before the JVM exits (blue-green drain).
   lifecycle:
     timeout-per-shutdown-phase: 30s

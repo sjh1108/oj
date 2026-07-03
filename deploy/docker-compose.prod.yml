@@ -1,14 +1,14 @@
-# Production compose for the Lightsail box — MySQL only.
+# Production compose for the Lightsail box — MySQL + RabbitMQ.
 # The API is deployed blue-green by deploy/deploy-api.sh (two alternating
 # containers behind nginx), so it is NOT a compose service here. Judge0 is
 # assumed to already be running on the host at :2358.
 #
 # Usage on the box:
-#   docker compose -f docker-compose.prod.yml --env-file .env up -d   # MySQL
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d   # MySQL + RabbitMQ
 #   IMAGE=ghcr.io/sjh1108/oj-api:latest bash deploy-api.sh            # API (blue-green)
 #
 # The named network below is shared: deploy-api.sh attaches the API container to
-# `algoj_default` so it can reach MySQL by its service name.
+# `algoj_default` so it can reach MySQL/RabbitMQ by their service names.
 
 services:
   mysql:
@@ -33,6 +33,26 @@ services:
       - --max-connections=50
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    # Plain (non-management) alpine image: ~100MB RSS on the 2GB box.
+    image: rabbitmq:4-alpine
+    container_name: algoj-rabbitmq
+    restart: unless-stopped
+    ports:
+      # localhost-only bind, same policy as MySQL
+      - "127.0.0.1:5672:5672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      # Durable queue data — queued judge jobs survive a broker restart.
+      - ./rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 5s
       retries: 10

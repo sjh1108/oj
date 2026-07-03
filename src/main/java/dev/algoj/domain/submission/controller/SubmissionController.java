@@ -4,7 +4,7 @@ import dev.algoj.domain.submission.dto.SubmissionDetailResponse;
 import dev.algoj.domain.submission.dto.SubmissionResponse;
 import dev.algoj.domain.submission.dto.SubmitRequest;
 import dev.algoj.domain.submission.dto.VisibilityRequest;
-import dev.algoj.domain.submission.service.JudgeAsyncService;
+import dev.algoj.domain.submission.service.JudgeQueueProducer;
 import dev.algoj.domain.submission.service.SubmissionService;
 import dev.algoj.global.security.UserPrincipal;
 import jakarta.validation.Valid;
@@ -27,14 +27,14 @@ import java.util.Map;
 public class SubmissionController {
 
     private final SubmissionService submissionService;
-    private final JudgeAsyncService judgeAsyncService;
+    private final JudgeQueueProducer judgeQueueProducer;
 
     @PostMapping
     public ResponseEntity<SubmissionResponse> submit(
             @Valid @RequestBody SubmitRequest request,
             @AuthenticationPrincipal UserPrincipal principal) {
         SubmissionResponse response = submissionService.createPending(request, principal);
-        judgeAsyncService.judge(response.id());
+        judgeQueueProducer.enqueue(response.id());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -71,7 +71,7 @@ public class SubmissionController {
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> rejudge(@PathVariable Long id) {
         Long resetId = submissionService.resetForRejudge(id);
-        judgeAsyncService.judge(resetId);
+        judgeQueueProducer.enqueue(resetId);
         return ResponseEntity.accepted().body(Map.of("submissionId", resetId, "queued", 1));
     }
 }

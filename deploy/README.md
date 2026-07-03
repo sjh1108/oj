@@ -260,6 +260,39 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ---
 
+## RabbitMQ 채점 큐
+
+제출 채점은 인프로세스 스레드풀(`@Async`)이 아니라 **RabbitMQ 큐**를 통해 처리된다.
+제출 시 API가 `judge.queue`에 submission id를 durable 메시지로 넣고, 리스너 워커
+(기본 동시성 2, `JUDGE_WORKER_CONCURRENCY`)가 꺼내서 Judge0로 채점한다.
+
+- **재시작 내구성**: 큐/메시지가 durable이라 API·브로커가 재시작해도 대기 중인 채점이 유실되지 않는다.
+  채점 도중 워커가 죽으면 unacked 메시지가 재전달되어 다시 채점된다(JUDGING 고아 상태 방지).
+- **블루-그린 겹침**: 배포 중 구/신 컨테이너가 동시에 컨슈머로 붙어도 안전하다(같은 큐를 나눠 소비).
+- **DLQ**: 역직렬화 실패 등으로 reject된 메시지는 `judge.queue.dlq`로 빠진다. 쌓이면 조사할 것.
+
+### 박스 1회 설정 (기존 박스 업그레이드)
+
+```bash
+cd /opt/algoj
+
+# 1) .env에 브로커 계정 추가
+openssl rand -base64 24   # → RABBITMQ_PASSWORD
+#   RABBITMQ_USER=algoj
+#   RABBITMQ_PASSWORD=<위 값>
+
+# 2) 브로커 기동 (compose에 rabbitmq 서비스 추가됨)
+docker compose -f docker-compose.prod.yml --env-file .env up -d
+docker logs algoj-rabbitmq --tail 20
+
+# 3) 새 API 이미지 배포 (deploy-api.sh가 RABBITMQ_HOST=rabbitmq를 주입)
+IMAGE=ghcr.io/sjh1108/oj-api:latest bash deploy-api.sh
+```
+
+> 큐 상태 확인: `docker exec algoj-rabbitmq rabbitmqctl list_queues name messages consumers`
+
+---
+
 ## Discord 봇 (선택) — 비밀번호 분실 / 계정 연동
 
 회원이 디스코드에서 `/비밀번호분실` 로 임시 비밀번호를 받고(`/연동` 으로 미리 계정 연결),

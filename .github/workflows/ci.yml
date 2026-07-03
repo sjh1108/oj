@@ -32,10 +32,21 @@ jobs:
           --health-timeout=5s
           --health-retries=10
 
+      rabbitmq:
+        image: rabbitmq:4-alpine
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd="rabbitmq-diagnostics -q ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
     # The @SpringBootTest context load needs these placeholders resolved.
     env:
       SPRING_PROFILES_ACTIVE: dev
       DB_HOST: 127.0.0.1
+      RABBITMQ_HOST: 127.0.0.1
       DB_PORT: 3306
       DB_NAME: algoj
       DB_USER: algoj

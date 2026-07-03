@@ -6,7 +6,7 @@ import dev.algoj.domain.problem.dto.ProblemListResponse;
 import dev.algoj.domain.problem.dto.UpdateProblemRequest;
 import dev.algoj.domain.problem.service.ProblemService;
 import dev.algoj.domain.submission.dto.SubmissionResponse;
-import dev.algoj.domain.submission.service.JudgeAsyncService;
+import dev.algoj.domain.submission.service.JudgeQueueProducer;
 import dev.algoj.domain.submission.service.SubmissionService;
 import dev.algoj.domain.user.entity.User;
 import dev.algoj.global.security.UserPrincipal;
@@ -32,7 +32,7 @@ public class ProblemController {
 
     private final ProblemService problemService;
     private final SubmissionService submissionService;
-    private final JudgeAsyncService judgeAsyncService;
+    private final JudgeQueueProducer judgeQueueProducer;
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
@@ -87,7 +87,7 @@ public class ProblemController {
     public ResponseEntity<Map<String, Object>> rejudge(@PathVariable Long id) {
         List<Long> ids = submissionService.resetAllForProblemRejudge(id);
         for (Long sid : ids) {
-            judgeAsyncService.judge(sid);
+            judgeQueueProducer.enqueue(sid);
         }
         return ResponseEntity.accepted().body(Map.of("queued", ids.size()));
     }

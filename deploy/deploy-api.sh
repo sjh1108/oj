@@ -67,6 +67,7 @@ run_args=(
   --restart unless-stopped
   --env-file "$ENV_FILE"
   -e DB_HOST=mysql -e DB_PORT=3306
+  -e RABBITMQ_HOST=rabbitmq
   -e JUDGE0_URL=http://host.docker.internal:2358
   --add-host host.docker.internal:host-gateway
   --network "$NETWORK"

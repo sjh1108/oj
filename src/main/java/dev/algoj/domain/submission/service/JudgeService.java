@@ -13,7 +13,6 @@ import dev.algoj.global.client.dto.Judge0SubmissionRequest;
 import dev.algoj.global.client.dto.Judge0SubmissionResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,10 +20,15 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+/**
+ * Grades one submission against Judge0. Runs on RabbitMQ listener threads
+ * (see {@link JudgeQueueListener}); exceptions are swallowed into SYSTEM_ERROR
+ * so a poison submission never loops back onto the queue.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class JudgeAsyncService {
+public class JudgeService {
 
     private static final int DEFAULT_PROBLEM_POINTS = 100;
 
@@ -32,7 +36,6 @@ public class JudgeAsyncService {
     private final Judge0Client judge0Client;
     private final ObjectMapper objectMapper;
 
-    @Async("judgeExecutor")
     @Transactional
     public void judge(Long submissionId) {
         Submission s = submissionRepository.findById(submissionId).orElse(null);
