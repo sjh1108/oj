@@ -8,6 +8,7 @@ import type { Difficulty, ProblemDetailResponse } from "@/types/api";
 //   ---
 //   title: 두 수의 합
 //   difficulty: BRONZE        # BRONZE | SILVER | GOLD | PLATINUM | DIAMOND
+//   tags: 수학, 구현           # optional, comma-separated
 //   timeLimit: 1              # seconds
 //   memoryLimit: 256          # MB
 //   isPublic: true
@@ -53,6 +54,7 @@ export interface ParsedProblem {
   timeLimit: number; // seconds (form unit)
   memoryLimit: number; // MB (form unit)
   difficulty: Difficulty;
+  tags: string[];
   isPublic: boolean;
   testCases: ParsedTestCase[];
   // Present when the file uses an `<!-- @subtasks -->` section.
@@ -70,6 +72,7 @@ const DIFFICULTIES: Difficulty[] = [
 export const PROBLEM_TEMPLATE = `---
 title: 두 수의 합
 difficulty: BRONZE
+tags: 수학, 구현
 timeLimit: 1
 memoryLimit: 256
 isPublic: true
@@ -234,6 +237,11 @@ export function parseProblemFile(raw: string): ParsedProblem {
     timeLimit: clampNumber(parseFloat(meta.timelimit ?? "1"), 0.1, 60, 1),
     memoryLimit: clampNumber(parseFloat(meta.memorylimit ?? "256"), 1, 1024, 256),
     difficulty,
+    tags: (meta.tags ?? "")
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, 10),
     isPublic: !/^(false|no|0)$/i.test(meta.ispublic ?? "true"),
     testCases: parseTestCases(sections.testcases ?? ""),
     subtasks: subtasks.length > 0 ? subtasks : undefined,
@@ -246,6 +254,7 @@ export function buildProblemMarkdown(p: ProblemDetailResponse): string {
     "---",
     `title: ${p.title}`,
     `difficulty: ${p.difficulty}`,
+    ...(p.tags.length > 0 ? [`tags: ${p.tags.join(", ")}`] : []),
     `timeLimit: ${p.timeLimit / 1000}`,
     `memoryLimit: ${Math.round(p.memoryLimit / 1024)}`,
     `isPublic: ${p.isPublic}`,

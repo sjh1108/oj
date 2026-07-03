@@ -6,10 +6,14 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "problems")
@@ -46,6 +50,14 @@ public class Problem {
     @Column(nullable = false)
     private Difficulty difficulty;
 
+    // Free-form classification tags ("DP", "그래프", ...). @BatchSize keeps the
+    // problem-list page from firing one collection query per row.
+    @ElementCollection
+    @CollectionTable(name = "problem_tags", joinColumns = @JoinColumn(name = "problem_id"))
+    @Column(name = "tag", nullable = false, length = 30)
+    @BatchSize(size = 50)
+    private Set<String> tags = new LinkedHashSet<>();
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "author_id", nullable = false)
     private User author;
@@ -78,6 +90,7 @@ public class Problem {
                     Integer timeLimit,
                     Integer memoryLimit,
                     Difficulty difficulty,
+                    Collection<String> tags,
                     User author,
                     Boolean isPublic) {
         this.title = title;
@@ -87,6 +100,9 @@ public class Problem {
         this.timeLimit = timeLimit;
         this.memoryLimit = memoryLimit;
         this.difficulty = difficulty;
+        if (tags != null) {
+            this.tags = new LinkedHashSet<>(tags);
+        }
         this.author = author;
         this.isPublic = isPublic;
     }
@@ -110,6 +126,7 @@ public class Problem {
                        Integer timeLimit,
                        Integer memoryLimit,
                        Difficulty difficulty,
+                       Collection<String> tags,
                        Boolean isPublic) {
         this.title = title;
         this.description = description;
@@ -118,6 +135,10 @@ public class Problem {
         this.timeLimit = timeLimit;
         this.memoryLimit = memoryLimit;
         this.difficulty = difficulty;
+        if (tags != null) {
+            this.tags.clear();
+            this.tags.addAll(tags);
+        }
         this.isPublic = isPublic;
     }
 

@@ -12,6 +12,7 @@ import { runApi } from "@/lib/run-api";
 import { submissionsApi } from "@/lib/submissions-api";
 import { ApiError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -281,6 +282,11 @@ export default function ProblemDetailPage() {
                 #{p.id} {p.title}
               </h1>
               <DifficultyBadge difficulty={p.difficulty} />
+              {p.tags.map((t) => (
+                <Badge key={t} variant="outline" className="text-muted-foreground">
+                  {t}
+                </Badge>
+              ))}
             </div>
             <div className="flex gap-3 items-center">
               <Button

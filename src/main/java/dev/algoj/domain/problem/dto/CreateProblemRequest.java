@@ -30,6 +30,9 @@ public record CreateProblemRequest(
         @NotNull(message = "difficulty는 필수입니다.")
         Problem.Difficulty difficulty,
 
+        @Size(max = 10, message = "태그는 최대 10개까지 가능합니다.")
+        List<@NotBlank @Size(max = 30, message = "태그는 최대 30자까지 가능합니다.") String> tags,
+
         @NotNull(message = "isPublic은 필수입니다.")
         Boolean isPublic,
 

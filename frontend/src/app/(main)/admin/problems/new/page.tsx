@@ -18,6 +18,7 @@ import { problemsApi } from "@/lib/problems-api";
 import { useAuthStore } from "@/lib/auth-store";
 import { downloadTextFile } from "@/lib/download";
 import { parseProblemFile, PROBLEM_TEMPLATE } from "@/lib/problem-file";
+import { splitTags } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -59,6 +60,7 @@ const schema = z
       .min(1, { error: "1MB 이상" })
       .max(1024, { error: "1024MB 이하" }),
     difficulty: z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM", "DIAMOND"]),
+    tags: z.string(),
     isPublic: z.boolean(),
     useSubtasks: z.boolean(),
     testCases: z.array(tcSchema),
@@ -115,6 +117,7 @@ export default function NewProblemPage() {
       timeLimit: 1,
       memoryLimit: 256,
       difficulty: "BRONZE",
+      tags: "",
       isPublic: true,
       useSubtasks: false,
       testCases: [{ ...FIRST_TC }],
@@ -171,6 +174,7 @@ export default function NewProblemPage() {
         timeLimit: parsed.timeLimit,
         memoryLimit: parsed.memoryLimit,
         difficulty: parsed.difficulty,
+        tags: parsed.tags.join(", "),
         isPublic: parsed.isPublic,
       };
       if (parsed.subtasks && parsed.subtasks.length > 0) {
@@ -218,6 +222,7 @@ export default function NewProblemPage() {
       timeLimit: Math.round(values.timeLimit * 1000),
       memoryLimit: Math.round(values.memoryLimit * 1024),
       difficulty: values.difficulty,
+      tags: splitTags(values.tags),
       isPublic: values.isPublic,
     };
     let payload: CreateProblemRequest;
@@ -427,6 +432,14 @@ export default function NewProblemPage() {
               <Label htmlFor="isPublic" className="cursor-pointer">
                 공개 문제
               </Label>
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="tags">태그 (선택, 쉼표로 구분)</Label>
+              <Input
+                id="tags"
+                placeholder="예: DP, 그래프, 구현"
+                {...form.register("tags")}
+              />
             </div>
           </CardContent>
         </Card>

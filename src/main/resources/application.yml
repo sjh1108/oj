@@ -12,6 +12,31 @@ spring:
 
   jpa:
     open-in-view: false
+    # Flyway owns the schema (db/migration); Hibernate only checks it matches.
+    hibernate:
+      ddl-auto: validate
+
+  flyway:
+    # Pre-Flyway databases (prod/dev with existing tables) get stamped as
+    # already at V1 on first boot; only empty databases actually run V1.
+    baseline-on-migrate: true
+    baseline-version: 1
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        # Judge0 shares the box — keep judge parallelism modest.
+        concurrency: ${JUDGE_WORKER_CONCURRENCY:2}
+        max-concurrency: ${JUDGE_WORKER_MAX_CONCURRENCY:4}
+        # One unacked message per worker so a second API container (blue-green
+        # overlap) can pick up queued work immediately.
+        prefetch: 1
+        # Rejected messages go to the DLQ (see RabbitConfig), never back on the queue.
+        default-requeue-rejected: false
 
   # Let in-flight requests finish before the JVM exits (blue-green drain).
   lifecycle:
@@ -54,8 +79,7 @@ spring:
       on-profile: dev
 
   jpa:
-    hibernate:
-      ddl-auto: update
+    # Schema changes go through Flyway migrations now (no more ddl-auto: update).
     properties:
       hibernate:
         format_sql: true
@@ -75,10 +99,6 @@ spring:
   config:
     activate:
       on-profile: prod
-
-  jpa:
-    hibernate:
-      ddl-auto: validate
 
 logging:
   level:

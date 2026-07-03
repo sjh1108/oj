@@ -22,18 +22,18 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
-class JudgeAsyncServiceSubtaskTest {
+class JudgeServiceSubtaskTest {
 
     @Mock
     SubmissionRepository submissionRepository;
     @Mock
     Judge0Client judge0Client;
 
-    JudgeAsyncService service;
+    JudgeService service;
 
     @BeforeEach
     void setUp() {
-        service = new JudgeAsyncService(submissionRepository, judge0Client, new ObjectMapper());
+        service = new JudgeService(submissionRepository, judge0Client, new ObjectMapper());
     }
 
     private static final int AC = 3;   // Judge0 "Accepted"
