@@ -65,12 +65,26 @@ export interface TestCaseResponse {
   isSample: boolean;
 }
 
+export type SolvedFilter = "ALL" | "SOLVED" | "ATTEMPTED" | "UNSOLVED";
+
+export interface ProblemListParams {
+  page?: number;
+  size?: number;
+  keyword?: string;
+  difficulty?: Difficulty | "";
+  tag?: string;
+  solved?: SolvedFilter;
+}
+
 export interface ProblemListItem {
   id: number;
   title: string;
   difficulty: Difficulty;
+  tags: string[];
   authorUsername: string | null;
   isPublic: boolean;
+  solved: boolean;
+  attempted: boolean;
   createdAt: string;
 }
 
@@ -83,6 +97,7 @@ export interface ProblemDetailResponse {
   timeLimit: number;
   memoryLimit: number;
   difficulty: Difficulty;
+  tags: string[];
   authorUsername: string | null;
   isPublic: boolean;
   sampleTestCases: TestCaseResponse[];
@@ -134,6 +149,7 @@ export interface CreateProblemRequest {
   timeLimit: number;
   memoryLimit: number;
   difficulty: Difficulty;
+  tags?: string[];
   isPublic: boolean;
   testCases?: TestCaseRequest[];
   subtasks?: SubtaskRequest[];

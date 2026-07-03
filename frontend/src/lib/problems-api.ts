@@ -6,6 +6,7 @@ import type {
   PageResponse,
   ProblemDetailResponse,
   ProblemListItem,
+  ProblemListParams,
   TestCaseRequest,
   TestCaseResponse,
 } from "@/types/api";
@@ -18,14 +19,20 @@ export interface UpdateProblemRequest {
   timeLimit: number;
   memoryLimit: number;
   difficulty: "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "DIAMOND";
+  tags?: string[];
   isPublic: boolean;
 }
 
 export const problemsApi = {
-  list: (page = 0, size = 20) =>
-    api<PageResponse<ProblemListItem>>(
-      `/api/problems?page=${page}&size=${size}`,
-    ),
+  list: ({ page = 0, size = 20, keyword, difficulty, tag, solved }: ProblemListParams = {}) => {
+    const params = new URLSearchParams({ page: String(page), size: String(size) });
+    if (keyword?.trim()) params.set("keyword", keyword.trim());
+    if (difficulty) params.set("difficulty", difficulty);
+    if (tag) params.set("tag", tag);
+    if (solved && solved !== "ALL") params.set("solved", solved);
+    return api<PageResponse<ProblemListItem>>(`/api/problems?${params}`);
+  },
+  tags: () => api<string[]>("/api/problems/tags"),
   detail: (id: number) =>
     api<ProblemDetailResponse>(`/api/problems/${id}`),
   create: (body: CreateProblemRequest) =>

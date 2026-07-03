@@ -26,4 +26,7 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
     @Query("select distinct s.problem.id from Submission s " +
             "where s.user.id = :userId and s.status = dev.algoj.domain.submission.entity.Submission.Status.ACCEPTED")
     List<Long> findDistinctSolvedProblemIdsByUserId(@Param("userId") Long userId);
+
+    @Query("select distinct s.problem.id from Submission s where s.user.id = :userId")
+    List<Long> findDistinctSubmittedProblemIdsByUserId(@Param("userId") Long userId);
 }

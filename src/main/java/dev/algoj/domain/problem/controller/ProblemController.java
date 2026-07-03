@@ -3,7 +3,9 @@ package dev.algoj.domain.problem.controller;
 import dev.algoj.domain.problem.dto.CreateProblemRequest;
 import dev.algoj.domain.problem.dto.ProblemDetailResponse;
 import dev.algoj.domain.problem.dto.ProblemListResponse;
+import dev.algoj.domain.problem.dto.ProblemSearchCondition;
 import dev.algoj.domain.problem.dto.UpdateProblemRequest;
+import dev.algoj.domain.problem.entity.Problem;
 import dev.algoj.domain.problem.service.ProblemService;
 import dev.algoj.domain.submission.dto.SubmissionResponse;
 import dev.algoj.domain.submission.service.JudgeQueueProducer;
@@ -46,9 +48,20 @@ public class ProblemController {
     @GetMapping
     public ResponseEntity<Page<ProblemListResponse>> list(
             @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Problem.Difficulty difficulty,
+            @RequestParam(required = false) String tag,
+            @RequestParam(required = false) ProblemSearchCondition.SolvedFilter solved,
             @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
         boolean isAdmin = principal.getRole() == User.Role.ADMIN;
-        return ResponseEntity.ok(problemService.list(isAdmin, pageable));
+        ProblemSearchCondition cond = new ProblemSearchCondition(keyword, difficulty, tag, solved);
+        return ResponseEntity.ok(problemService.list(cond, principal.getId(), isAdmin, pageable));
+    }
+
+    @GetMapping("/tags")
+    public ResponseEntity<List<String>> tags(@AuthenticationPrincipal UserPrincipal principal) {
+        boolean isAdmin = principal.getRole() == User.Role.ADMIN;
+        return ResponseEntity.ok(problemService.listTags(isAdmin));
     }
 
     @GetMapping("/{id}")

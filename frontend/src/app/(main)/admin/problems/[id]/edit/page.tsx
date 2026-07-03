@@ -11,6 +11,7 @@ import { z } from "zod";
 import { ApiError } from "@/lib/api";
 import { problemsApi, type UpdateProblemRequest } from "@/lib/problems-api";
 import { useAuthStore } from "@/lib/auth-store";
+import { splitTags } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ const schema = z.object({
   timeLimit: z.number().min(0.1, { error: "0.1s 이상" }).max(60, { error: "60s 이하" }),
   memoryLimit: z.number().min(1, { error: "1MB 이상" }).max(1024, { error: "1024MB 이하" }),
   difficulty: z.enum(["BRONZE", "SILVER", "GOLD", "PLATINUM", "DIAMOND"]),
+  tags: z.string(),
   isPublic: z.boolean(),
 });
 
@@ -70,6 +72,7 @@ export default function EditProblemPage() {
           timeLimit: problem.data.timeLimit / 1000,
           memoryLimit: problem.data.memoryLimit / 1024,
           difficulty: problem.data.difficulty,
+          tags: problem.data.tags.join(", "),
           isPublic: problem.data.isPublic,
         }
       : undefined,
@@ -115,6 +118,7 @@ export default function EditProblemPage() {
             ...v,
             timeLimit: Math.round(v.timeLimit * 1000),
             memoryLimit: Math.round(v.memoryLimit * 1024),
+            tags: splitTags(v.tags),
           }),
         )}
         className="space-y-6"
@@ -248,6 +252,14 @@ export default function EditProblemPage() {
               <Label htmlFor="isPublic" className="cursor-pointer">
                 공개 문제
               </Label>
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label htmlFor="tags">태그 (선택, 쉼표로 구분)</Label>
+              <Input
+                id="tags"
+                placeholder="예: DP, 그래프, 구현"
+                {...form.register("tags")}
+              />
             </div>
           </CardContent>
         </Card>
