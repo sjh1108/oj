@@ -386,7 +386,30 @@ docker compose -f docker-compose.bot.yml --env-file .env up -d
 docker logs algoj-bot --tail 30      # "Logged in as ..." + 슬래시 명령 등록 로그
 ```
 
-컨테이너 시작 시 슬래시 명령(`/연동`, `/비밀번호분실`)을 길드에 자동 등록한다.
+컨테이너 시작 시 슬래시 명령(`/연동`, `/비밀번호분실`, `/서버상태`)을 길드에 자동 등록한다.
+
+### 모니터링 — `/서버상태`
+
+디스코드에서 `/서버상태`를 치면 봇이 백엔드의 `/api/internal/monitor`(봇 키 보호)를 호출해
+**DB · Judge0 · 채점 큐(대기/워커/DLQ) · 제출 현황(대기/채점중/오늘) · JVM 메모리/업타임**을
+임베드로 보여준다. 별도 설정 불필요 — 봇만 떠 있으면 된다.
+
+### 배포 공지 — master 머지 시 자동
+
+CD가 블루-그린 배포를 **성공**하면, 머지된 PR의 제목/본문을 봇의 로컬 공지 리스너
+(`127.0.0.1:3910`, `BOT_API_KEY`로 보호, 외부 노출 없음)로 전달하고 봇이 지정 채널에
+업데이트 임베드를 올린다.
+
+설정 (1회): `/opt/algoj/.env`에 공지 채널 ID 추가 후 봇 재시작.
+
+```bash
+# 디스코드: 설정 → 고급 → 개발자 모드 ON → 공지 채널 우클릭 → "채널 ID 복사"
+echo "DISCORD_ANNOUNCE_CHANNEL_ID=<채널ID>" >> /opt/algoj/.env
+docker compose -f docker-compose.bot.yml --env-file .env up -d --force-recreate bot
+```
+
+- 채널 ID를 안 넣으면 공지 기능만 조용히 꺼진다(배포는 정상 진행).
+- 봇이 죽어 있어도 배포는 실패하지 않는다 — 공지만 건너뛴다.
 
 > **봇 → 백엔드 연결**: prod compose는 API를 `127.0.0.1:8080`(루프백 전용)에만 바인딩하므로
 > 봇은 `docker-compose.bot.yml`의 `network_mode: host` + `OJ_API_BASE_URL=http://127.0.0.1:8080`
