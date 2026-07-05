@@ -19,4 +19,11 @@ export const config = {
   // Base URL of the FRONTEND web app (Vercel) where members log in / change
   // their password — the site that serves /account. NOT the API domain.
   webBaseUrl: (process.env.OJ_WEB_BASE_URL || "http://localhost:3000").replace(/\/$/, ""),
+
+  // ── Deploy announcements (optional) ──
+  // Channel that receives the "새 업데이트" embed after a successful deploy.
+  // Leave unset to disable the announce listener entirely.
+  announceChannelId: process.env.DISCORD_ANNOUNCE_CHANNEL_ID || "",
+  // Loopback-only HTTP port the CD deploy script POSTs the PR info to.
+  announcePort: parseInt(process.env.ANNOUNCE_PORT || "3910", 10),
 };

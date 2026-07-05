@@ -29,4 +29,8 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
 
     @Query("select distinct s.problem.id from Submission s where s.user.id = :userId")
     List<Long> findDistinctSubmittedProblemIdsByUserId(@Param("userId") Long userId);
+
+    long countByStatus(Submission.Status status);
+
+    long countByCreatedAtGreaterThanEqual(java.time.LocalDateTime createdAt);
 }

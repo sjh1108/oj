@@ -75,6 +75,20 @@ public class Judge0Client {
         );
     }
 
+    /** Cheap liveness probe for monitoring — true when Judge0 answers /languages. */
+    public boolean isUp() {
+        try {
+            judge0RestClient.get()
+                    .uri("/languages")
+                    .retrieve()
+                    .toBodilessEntity();
+            return true;
+        } catch (Exception e) {
+            log.warn("Judge0 liveness probe failed: {}", e.getMessage());
+            return false;
+        }
+    }
+
     private static String b64Encode(String s) {
         if (s == null) return null;
         return Base64.getEncoder().encodeToString(s.getBytes(StandardCharsets.UTF_8));
