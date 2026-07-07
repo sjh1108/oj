@@ -221,7 +221,7 @@ jobs:
             # Tell the Discord bot to announce the update (best-effort: an
             # absent/disabled bot must never fail the deploy).
             if [ -n "$ANNOUNCE_B64" ]; then
-              echo "$ANNOUNCE_B64" | base64 -d | curl -m 10 -sS -X POST \
+              echo "$ANNOUNCE_B64" | base64 -d | curl -m 10 -fsS -X POST \
                 -H "Content-Type: application/json" \
                 -H "X-Bot-Api-Key: $(grep '^BOT_API_KEY=' .env | cut -d= -f2-)" \
                 --data-binary @- http://127.0.0.1:3910/announce \
