@@ -1,4 +1,8 @@
-import type { Difficulty, ProblemDetailResponse } from "@/types/api";
+import type {
+  CreateProblemRequest,
+  Difficulty,
+  ProblemDetailResponse,
+} from "@/types/api";
 
 // ── Single-file problem format ──────────────────────────────────────────────
 //
@@ -245,6 +249,37 @@ export function parseProblemFile(raw: string): ParsedProblem {
     isPublic: !/^(false|no|0)$/i.test(meta.ispublic ?? "true"),
     testCases: parseTestCases(sections.testcases ?? ""),
     subtasks: subtasks.length > 0 ? subtasks : undefined,
+  };
+}
+
+/** Convert a parsed file straight into the create-problem API payload
+ *  (form units → API units: seconds→ms, MB→KB; running orderIndex). */
+export function toCreateProblemRequest(p: ParsedProblem): CreateProblemRequest {
+  const base = {
+    title: p.title,
+    description: p.description,
+    inputDescription: p.inputDescription,
+    outputDescription: p.outputDescription,
+    timeLimit: Math.round(p.timeLimit * 1000),
+    memoryLimit: Math.round(p.memoryLimit * 1024),
+    difficulty: p.difficulty,
+    tags: p.tags,
+    isPublic: p.isPublic,
+  };
+  if (p.subtasks && p.subtasks.length > 0) {
+    let order = 0;
+    return {
+      ...base,
+      subtasks: p.subtasks.map((st) => ({
+        label: st.label,
+        points: st.points,
+        testCases: st.testCases.map((tc) => ({ ...tc, orderIndex: order++ })),
+      })),
+    };
+  }
+  return {
+    ...base,
+    testCases: p.testCases.map((tc, i) => ({ ...tc, orderIndex: i })),
   };
 }
 
