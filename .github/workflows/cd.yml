@@ -155,8 +155,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # PR info for the Discord deploy announcement. Base64 so the multi-line
-      # body travels safely through env vars into the SSH session.
+      # Discord announcement is OPT-IN per PR: only PRs whose body contains a
+      # "## 공지" section get announced, and only that section's content is
+      # posted — user-facing release notes, not the whole technical body.
+      # Base64 so the multi-line text travels safely through env vars into SSH.
       - name: Collect merged PR info
         id: prinfo
         uses: actions/github-script@v7
@@ -173,10 +175,28 @@ jobs:
               core.setOutput("announce_b64", "");
               return;
             }
+            // Extract the "## 공지" section: everything until the next H2 (or EOF).
+            const lines = (pr.body ?? "").replace(/\r\n/g, "\n").split("\n");
+            const start = lines.findIndex((l) => /^##\s*공지\s*$/.test(l.trim()));
+            if (start === -1) {
+              core.info(`PR #${pr.number} has no "## 공지" section — not announcing.`);
+              core.setOutput("announce_b64", "");
+              return;
+            }
+            let end = lines.length;
+            for (let i = start + 1; i < lines.length; i++) {
+              if (/^##\s+/.test(lines[i])) { end = i; break; }
+            }
+            const notice = lines.slice(start + 1, end).join("\n").trim();
+            if (!notice) {
+              core.info(`PR #${pr.number} "## 공지" section is empty — not announcing.`);
+              core.setOutput("announce_b64", "");
+              return;
+            }
             const payload = {
               number: pr.number,
               title: pr.title,
-              body: pr.body ?? "",
+              body: notice,
               url: pr.html_url,
             };
             core.setOutput("announce_b64",
@@ -227,4 +247,6 @@ jobs:
                 --data-binary @- http://127.0.0.1:3910/announce \
                 && echo "deploy announced to Discord" \
                 || echo "announce skipped (bot not reachable)"
+            else
+              echo "announce skipped (PR has no '## 공지' section)"
             fi
