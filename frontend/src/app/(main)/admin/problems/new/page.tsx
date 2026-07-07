@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import {
@@ -263,14 +264,23 @@ export default function NewProblemPage() {
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle className="text-base">파일로 채우기 (선택)</CardTitle>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => downloadTextFile("problem-template.md", PROBLEM_TEMPLATE)}
-            >
-              템플릿 다운로드
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => downloadTextFile("problem-template.md", PROBLEM_TEMPLATE)}
+              >
+                템플릿 다운로드
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                render={<Link href="/admin/problems/import" />}
+              >
+                여러 파일 한번에 업로드
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-2">
             <p className="text-sm text-muted-foreground">
