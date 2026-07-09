@@ -1,9 +1,11 @@
 package dev.algoj.domain.problem.controller;
 
+import dev.algoj.domain.problem.dto.AppendTestCaseChunkRequest;
 import dev.algoj.domain.problem.dto.GenerateTestCaseRequest;
 import dev.algoj.domain.problem.dto.GenerateTestCaseResponse;
 import dev.algoj.domain.problem.dto.TestCaseRequest;
 import dev.algoj.domain.problem.dto.TestCaseResponse;
+import dev.algoj.domain.problem.dto.TestCaseUploadStatusResponse;
 import dev.algoj.domain.problem.service.TestCaseGeneratorService;
 import dev.algoj.domain.problem.service.TestCaseService;
 import jakarta.validation.Valid;
@@ -43,6 +45,23 @@ public class TestCaseController {
     @GetMapping
     public ResponseEntity<List<TestCaseResponse>> listAll(@PathVariable Long problemId) {
         return ResponseEntity.ok(testCaseService.listAll(problemId));
+    }
+
+    // Chunked upload for test cases whose data exceeds the proxy body limit:
+    // POST with draft=true → PATCH append chunks → POST finalize.
+    @PatchMapping("/{testCaseId}/append")
+    public ResponseEntity<TestCaseUploadStatusResponse> appendChunk(
+            @PathVariable Long problemId,
+            @PathVariable Long testCaseId,
+            @Valid @RequestBody AppendTestCaseChunkRequest request) {
+        return ResponseEntity.ok(testCaseService.appendChunk(problemId, testCaseId, request));
+    }
+
+    @PostMapping("/{testCaseId}/finalize")
+    public ResponseEntity<TestCaseUploadStatusResponse> finalizeUpload(
+            @PathVariable Long problemId,
+            @PathVariable Long testCaseId) {
+        return ResponseEntity.ok(testCaseService.finalizeUpload(problemId, testCaseId));
     }
 
     @PutMapping("/{testCaseId}")

@@ -27,6 +27,7 @@ public enum ErrorCode {
     TEST_CASE_NOT_FOUND(HttpStatus.NOT_FOUND, "T001", "존재하지 않는 테스트케이스입니다."),
     TEST_CASE_NOT_BELONG_TO_PROBLEM(HttpStatus.BAD_REQUEST, "T002", "해당 문제의 테스트케이스가 아닙니다."),
     NO_TEST_CASES(HttpStatus.BAD_REQUEST, "T003", "채점할 테스트케이스가 없습니다."),
+    TEST_CASE_NOT_DRAFT(HttpStatus.CONFLICT, "T004", "완료된 테스트케이스에는 데이터를 이어붙일 수 없습니다."),
 
     // Submission / Judge0
     SUBMISSION_NOT_FOUND(HttpStatus.NOT_FOUND, "S001", "존재하지 않는 제출입니다."),

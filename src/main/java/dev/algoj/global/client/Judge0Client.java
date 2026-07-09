@@ -58,7 +58,8 @@ public class Judge0Client {
                 b64Encode(p.stdin()),
                 b64Encode(p.expectedOutput()),
                 p.cpuTimeLimit(),
-                p.memoryLimit()
+                p.memoryLimit(),
+                p.maxFileSize()
         );
     }
 

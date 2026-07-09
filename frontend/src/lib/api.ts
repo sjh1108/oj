@@ -99,11 +99,38 @@ export async function api<T>(
   if (res.status === 204) return undefined as T;
 
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  // Error responses from proxies (e.g. nginx 413) are HTML, not JSON — don't
+  // let JSON.parse turn them into a misleading "network error".
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = null;
+    }
+  }
 
   if (!res.ok) {
-    throw new ApiError(res.status, data as ErrorResponse);
+    if (isErrorResponse(data)) {
+      throw new ApiError(res.status, data);
+    }
+    throw new ApiError(res.status, {
+      code: `HTTP_${res.status}`,
+      message:
+        res.status === 413
+          ? "요청이 너무 큽니다 (서버 업로드 용량 제한 초과)"
+          : `서버 오류 (HTTP ${res.status})`,
+    });
   }
 
   return data as T;
+}
+
+function isErrorResponse(data: unknown): data is ErrorResponse {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    typeof (data as ErrorResponse).code === "string" &&
+    typeof (data as ErrorResponse).message === "string"
+  );
 }

@@ -63,6 +63,7 @@ export interface TestCaseResponse {
   expectedOutput: string;
   orderIndex: number;
   isSample: boolean;
+  isDraft: boolean;
 }
 
 export type SolvedFilter = "ALL" | "SOLVED" | "ATTEMPTED" | "UNSOLVED";
@@ -111,6 +112,21 @@ export interface TestCaseRequest {
   expectedOutput: string;
   orderIndex: number;
   isSample: boolean;
+  // Create as a draft so data can be appended in <1MB chunks; drafts are
+  // excluded from judging until finalized.
+  draft?: boolean;
+}
+
+export interface AppendTestCaseChunkRequest {
+  inputChunk?: string;
+  expectedOutputChunk?: string;
+}
+
+export interface TestCaseUploadStatusResponse {
+  id: number;
+  inputLength: number;
+  expectedOutputLength: number;
+  draft: boolean;
 }
 
 export interface GenerateTestCaseRequest {

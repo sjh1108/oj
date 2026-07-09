@@ -25,7 +25,7 @@ public record ProblemDetailResponse(
         LocalDateTime updatedAt
 ) {
     public static ProblemDetailResponse from(Problem p) {
-        List<TestCaseResponse> samples = p.getTestCases().stream()
+        List<TestCaseResponse> samples = p.getActiveTestCases().stream()
                 .filter(TestCase::getIsSample)
                 .sorted(Comparator.comparing(TestCase::getOrderIndex))
                 .map(TestCaseResponse::from)

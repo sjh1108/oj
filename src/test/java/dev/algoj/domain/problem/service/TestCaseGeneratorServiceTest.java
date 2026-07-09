@@ -47,6 +47,7 @@ class TestCaseGeneratorServiceTest {
     void setUp() {
         ReflectionTestUtils.setField(service, "generateTimeLimitMs", 10000);
         ReflectionTestUtils.setField(service, "generateMemoryLimitKb", 512000);
+        ReflectionTestUtils.setField(service, "generateMaxFileSizeKb", 4096);
         when(problemRepository.findById(1L)).thenReturn(Optional.of(sampleProblem()));
     }
 

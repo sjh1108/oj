@@ -13,6 +13,7 @@ import dev.algoj.global.client.dto.Judge0SubmissionRequest;
 import dev.algoj.global.client.dto.Judge0SubmissionResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +36,11 @@ public class JudgeService {
     private final SubmissionRepository submissionRepository;
     private final Judge0Client judge0Client;
     private final ObjectMapper objectMapper;
+
+    // Contestant runs may legitimately print multi-MB outputs for generated
+    // test data — Judge0's default 1024KB fsize would truncate them.
+    @Value("${judge0.judge.max-file-size-kb}")
+    private int judgeMaxFileSizeKb;
 
     @Transactional
     public void judge(Long submissionId) {
@@ -79,7 +85,8 @@ public class JudgeService {
                         tc.getInput(),
                         tc.getExpectedOutput(),
                         problem.getTimeLimit(),
-                        problem.getMemoryLimit()
+                        problem.getMemoryLimit(),
+                        judgeMaxFileSizeKb
                 );
                 Judge0SubmissionResponse res = judge0Client.submitAndWait(req);
                 Submission.Status tcStatus = Judge0StatusMapper.toSubmissionStatus(res.status().id());
@@ -127,11 +134,12 @@ public class JudgeService {
                             st.getLabel(),
                             st.getPoints(),
                             st.getTestCases().stream()
+                                    .filter(tc -> !Boolean.TRUE.equals(tc.getIsDraft()))
                                     .sorted(Comparator.comparing(TestCase::getOrderIndex))
                                     .toList()))
                     .toList();
         }
-        List<TestCase> all = problem.getTestCases().stream()
+        List<TestCase> all = problem.getActiveTestCases().stream()
                 .sorted(Comparator.comparing(TestCase::getOrderIndex))
                 .toList();
         return List.of(new Group("전체", DEFAULT_PROBLEM_POINTS, all));

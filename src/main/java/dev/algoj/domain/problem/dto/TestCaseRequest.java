@@ -13,6 +13,10 @@ public record TestCaseRequest(
         Integer orderIndex,
 
         @NotNull(message = "isSample은 필수입니다.")
-        Boolean isSample
+        Boolean isSample,
+
+        // Optional (null → false). true creates the case as a draft so its data
+        // can be appended in chunks before finalizing; drafts are never judged.
+        Boolean draft
 ) {
 }

@@ -14,6 +14,7 @@ import dev.algoj.global.exception.ErrorCode;
 import dev.algoj.global.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,9 @@ public class RunService {
 
     private final ProblemRepository problemRepository;
     private final Judge0Client judge0Client;
+
+    @Value("${judge0.judge.max-file-size-kb}")
+    private int judgeMaxFileSizeKb;
 
     @Transactional(readOnly = true)
     public RunResponse run(RunRequest req, UserPrincipal principal) {
@@ -41,7 +45,8 @@ public class RunService {
                 req.stdin() != null ? req.stdin() : "",
                 null,
                 problem.getTimeLimit(),
-                problem.getMemoryLimit()
+                problem.getMemoryLimit(),
+                judgeMaxFileSizeKb
         );
 
         Judge0SubmissionResponse res = judge0Client.submitAndWait(judge0Req);

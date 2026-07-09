@@ -19,6 +19,8 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -120,6 +122,30 @@ class JudgeServiceSubtaskTest {
 
         assertThat(s.getScore()).isEqualTo(0);
         assertThat(s.getStatus()).isEqualTo(Submission.Status.WRONG_ANSWER);
+    }
+
+    @Test
+    void draftTestCases_areExcludedFromJudging() {
+        Problem problem = Problem.builder()
+                .title("p").description("d")
+                .timeLimit(1000).memoryLimit(256000)
+                .difficulty(Problem.Difficulty.BRONZE)
+                .isPublic(true)
+                .build();
+        problem.addTestCase(TestCase.builder().input("1").expectedOutput("1").orderIndex(0).isSample(false).build());
+        // Mid-upload draft — must not be sent to Judge0.
+        problem.addTestCase(TestCase.builder().input("partial").expectedOutput("").orderIndex(1).isSample(false).isDraft(true).build());
+
+        Submission s = submissionFor(problem, 1);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
+        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class)))
+                .thenReturn(judge0(AC));
+
+        service.judge(1L);
+
+        verify(judge0Client, times(1)).submitAndWait(any(Judge0SubmissionRequest.class));
+        assertThat(s.getStatus()).isEqualTo(Submission.Status.ACCEPTED);
+        assertThat(s.getPassedTestCases()).isEqualTo(1);
     }
 
     @Test

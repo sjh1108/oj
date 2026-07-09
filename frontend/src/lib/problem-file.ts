@@ -1,6 +1,7 @@
 import type {
   CreateProblemRequest,
   Difficulty,
+  Language,
   ProblemDetailResponse,
 } from "@/types/api";
 
@@ -34,9 +35,29 @@ import type {
 //   3
 //   ~~~
 //
+//   <!-- @generator -->  (optional; large test data without large uploads)
+//   ~~~generator python3 # runs server-side; its stdout becomes the case input
+//   ...generator source...
+//   ~~~
+//   ~~~solution cpp      # runs on that input; its stdout becomes the answer
+//   ...model solution source...
+//   ~~~
+//   ~~~case sample       # one block per case; body is the generator's stdin
+//   1 5
+//   ~~~
+//   ~~~case
+//   42 100000
+//   ~~~
+//
 // Sections are delimited by HTML comments (invisible when rendered, so they
 // never collide with body text). Test data uses ~~~ fences so the description
 // can freely use ``` code blocks.
+//
+// @generator cases are produced server-side via the generate API — only the
+// (small) code travels over HTTP, so multi-MB test data clears the proxy's
+// body-size limit. Not allowed together with @subtasks. Note: generator code
+// is not stored server-side; downloading the problem later serializes the
+// materialized test cases, not this section.
 
 export interface ParsedTestCase {
   input: string;
@@ -48,6 +69,19 @@ export interface ParsedSubtask {
   label: string;
   points: number;
   testCases: ParsedTestCase[];
+}
+
+export interface ParsedGeneratorCase {
+  stdin: string;
+  isSample: boolean;
+}
+
+export interface ParsedGeneratorSpec {
+  generatorLanguage: Language;
+  generatorCode: string;
+  solutionLanguage: Language;
+  solutionCode: string;
+  cases: ParsedGeneratorCase[];
 }
 
 export interface ParsedProblem {
@@ -63,6 +97,8 @@ export interface ParsedProblem {
   testCases: ParsedTestCase[];
   // Present when the file uses an `<!-- @subtasks -->` section.
   subtasks?: ParsedSubtask[];
+  // Present when the file uses an `<!-- @generator -->` section.
+  generator?: ParsedGeneratorSpec;
 }
 
 const DIFFICULTIES: Difficulty[] = [
@@ -109,6 +145,63 @@ A + B 를 한 줄에 출력한다.
 ~~~
 `;
 
+// Template for generator-based problems: big test data is produced server-side
+// (generator stdout → input, solution stdout → answer), so only code is uploaded.
+// Generation runs sequentially per case and can take ~10-20s each.
+export const GENERATOR_TEMPLATE = `---
+title: 큰 수의 합
+difficulty: SILVER
+tags: 수학, 구현
+timeLimit: 1
+memoryLimit: 256
+isPublic: true
+---
+
+<!-- @description -->
+N개의 수가 주어질 때 그 합을 출력하세요.
+
+<!-- @input -->
+첫째 줄에 N, 둘째 줄에 N개의 정수가 주어진다.
+
+<!-- @output -->
+합을 한 줄에 출력한다.
+
+<!-- @testcases -->
+~~~input sample
+3
+1 2 3
+~~~
+~~~output
+6
+~~~
+
+<!-- @generator -->
+~~~generator python3
+# stdin: "<seed> <n>" — 케이스마다 아래 ~~~case 블록의 내용이 stdin으로 들어옵니다.
+# stdout이 그대로 테스트케이스 입력이 됩니다.
+import sys, random
+seed, n = map(int, sys.stdin.read().split())
+random.seed(seed)
+print(n)
+print(*[random.randint(1, 10**9) for _ in range(n)])
+~~~
+~~~solution python3
+# 위 생성기의 출력이 stdin으로 들어오고, stdout이 기대 출력이 됩니다.
+import sys
+data = sys.stdin.read().split()
+print(sum(map(int, data[1:])))
+~~~
+~~~case sample
+1 5
+~~~
+~~~case
+42 100000
+~~~
+~~~case
+43 200000
+~~~
+`;
+
 function clampNumber(
   value: number,
   min: number,
@@ -119,17 +212,26 @@ function clampNumber(
   return Math.min(max, Math.max(min, value));
 }
 
-function parseTestCases(region: string): ParsedTestCase[] {
-  // Match ``` or ~~~ fenced blocks with an info string of `input...` / `output...`.
+// Match ``` or ~~~ fenced blocks; `info` is the fence's info string
+// (e.g. "input sample", "generator python3").
+function parseFences(region: string): { info: string; content: string }[] {
   const fenceRe = /(`{3,}|~{3,})[ \t]*([^\n]*)\n([\s\S]*?)\n?\1[ \t]*(?=\n|$)/g;
+  const fences: { info: string; content: string }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = fenceRe.exec(region)) !== null) {
+    fences.push({ info: m[2].trim(), content: m[3] });
+  }
+  return fences;
+}
+
+function parseTestCases(region: string): ParsedTestCase[] {
   const cases: ParsedTestCase[] = [];
   let pendingInput: string | null = null;
   let pendingSample = false;
 
-  let m: RegExpExecArray | null;
-  while ((m = fenceRe.exec(region)) !== null) {
-    const info = m[2].trim().toLowerCase();
-    const content = m[3];
+  for (const fence of parseFences(region)) {
+    const info = fence.info.toLowerCase();
+    const content = fence.content;
     if (info.startsWith("input")) {
       pendingInput = content;
       pendingSample = /\bsample\b/.test(info);
@@ -146,6 +248,80 @@ function parseTestCases(region: string): ParsedTestCase[] {
     }
   }
   return cases;
+}
+
+const LANGUAGE_ALIASES: Record<string, Language> = {
+  python3: "PYTHON3",
+  python: "PYTHON3",
+  py: "PYTHON3",
+  cpp: "CPP",
+  "c++": "CPP",
+  java: "JAVA",
+  c: "C",
+  javascript: "JAVASCRIPT",
+  js: "JAVASCRIPT",
+  node: "JAVASCRIPT",
+};
+
+function parseLanguage(raw: string, fenceName: string): Language {
+  const lang = LANGUAGE_ALIASES[raw.toLowerCase()];
+  if (!lang) {
+    throw new Error(
+      `~~~${fenceName} 블록의 언어 '${raw}'를 지원하지 않습니다. (python3, cpp, java, c, javascript)`,
+    );
+  }
+  return lang;
+}
+
+// Parse the `<!-- @generator -->` region: one ~~~generator <lang> fence, one
+// ~~~solution <lang> fence, and one ~~~case fence per generated test case
+// (body = the generator's stdin; `sample` in the info string marks a sample).
+function parseGenerator(region: string): ParsedGeneratorSpec {
+  let generator: { language: Language; code: string } | null = null;
+  let solution: { language: Language; code: string } | null = null;
+  const cases: ParsedGeneratorCase[] = [];
+
+  for (const fence of parseFences(region)) {
+    const [name, ...rest] = fence.info.split(/\s+/);
+    const kind = (name ?? "").toLowerCase();
+    if (kind === "generator" || kind === "solution") {
+      const langRaw = rest[0];
+      if (!langRaw) {
+        throw new Error(`~~~${kind} 블록에 언어를 지정하세요. (예: ~~~${kind} python3)`);
+      }
+      const parsed = { language: parseLanguage(langRaw, kind), code: fence.content };
+      if (kind === "generator") {
+        if (generator) throw new Error("~~~generator 블록은 하나만 쓸 수 있습니다.");
+        generator = parsed;
+      } else {
+        if (solution) throw new Error("~~~solution 블록은 하나만 쓸 수 있습니다.");
+        solution = parsed;
+      }
+    } else if (kind === "case") {
+      cases.push({
+        stdin: fence.content,
+        isSample: rest.some((t) => t.toLowerCase() === "sample"),
+      });
+    }
+  }
+
+  if (!generator) {
+    throw new Error("<!-- @generator --> 섹션에 ~~~generator <언어> 블록이 필요합니다.");
+  }
+  if (!solution) {
+    throw new Error("<!-- @generator --> 섹션에 ~~~solution <언어> 블록이 필요합니다.");
+  }
+  if (cases.length === 0) {
+    throw new Error("<!-- @generator --> 섹션에 ~~~case 블록이 하나 이상 필요합니다.");
+  }
+
+  return {
+    generatorLanguage: generator.language,
+    generatorCode: generator.code,
+    solutionLanguage: solution.language,
+    solutionCode: solution.code,
+    cases,
+  };
 }
 
 // Parse the `<!-- @subtasks -->` region: each subtask starts at a `## ... points=NN`
@@ -232,6 +408,11 @@ export function parseProblemFile(raw: string): ParsedProblem {
   ) as Difficulty;
 
   const subtasks = parseSubtasks(sections.subtasks ?? "");
+  const generator =
+    sections.generator !== undefined ? parseGenerator(sections.generator) : undefined;
+  if (generator && subtasks.length > 0) {
+    throw new Error("@generator 섹션은 서브태스크 문제와 함께 사용할 수 없습니다.");
+  }
 
   return {
     title,
@@ -249,6 +430,7 @@ export function parseProblemFile(raw: string): ParsedProblem {
     isPublic: !/^(false|no|0)$/i.test(meta.ispublic ?? "true"),
     testCases: parseTestCases(sections.testcases ?? ""),
     subtasks: subtasks.length > 0 ? subtasks : undefined,
+    generator,
   };
 }
 

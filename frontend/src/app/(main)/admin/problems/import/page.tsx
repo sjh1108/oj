@@ -7,13 +7,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api";
-import { problemsApi } from "@/lib/problems-api";
+import { problemsApi, type UpdateProblemRequest } from "@/lib/problems-api";
 import { useAuthStore } from "@/lib/auth-store";
 import { downloadTextFile } from "@/lib/download";
 import {
   parseProblemFile,
   toCreateProblemRequest,
   PROBLEM_TEMPLATE,
+  GENERATOR_TEMPLATE,
   type ParsedProblem,
 } from "@/lib/problem-file";
 import { Badge } from "@/components/ui/badge";
@@ -30,9 +31,177 @@ interface ImportItem {
   status: ItemStatus;
   message?: string;
   createdId?: number;
+  // Live progress text while uploading ("테스트케이스 3/10 업로드 중").
+  progress?: string;
 }
 
 let nextKey = 1;
+
+// Everything must clear the reverse proxy's ~1MB body limit, with headroom for
+// JSON escaping. Requests under SAFE_REQUEST_BYTES go out in one shot; larger
+// problems are created empty and their test cases uploaded one by one, chunked
+// when a single case exceeds SINGLE_CASE_BYTES.
+const SAFE_REQUEST_BYTES = 800 * 1024;
+const SINGLE_CASE_BYTES = 512 * 1024;
+const CHUNK_CHARS = 384 * 1024;
+const MAX_ESCAPED_CHUNK_BYTES = 900 * 1024;
+
+const byteSize = (body: unknown) => new Blob([JSON.stringify(body)]).size;
+
+// Split into ~CHUNK_CHARS pieces, re-splitting any piece whose JSON-escaped
+// byte size is still too large (e.g. newline/unicode-heavy data).
+function splitChunks(s: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < s.length; i += CHUNK_CHARS) {
+    out.push(s.slice(i, i + CHUNK_CHARS));
+  }
+  const fit: string[] = [];
+  const queue = out.reverse();
+  while (queue.length > 0) {
+    const c = queue.pop()!;
+    if (c.length <= 1 || byteSize(c) <= MAX_ESCAPED_CHUNK_BYTES) {
+      fit.push(c);
+    } else {
+      const mid = Math.ceil(c.length / 2);
+      queue.push(c.slice(mid), c.slice(0, mid));
+    }
+  }
+  return fit;
+}
+
+const uploadErrorMessage = (err: unknown): string => {
+  if (err instanceof ApiError) return err.message;
+  if (err instanceof TypeError) {
+    return "네트워크 오류 또는 요청 크기 초과로 서버가 응답을 차단했습니다";
+  }
+  return "업로드 실패 (네트워크 오류)";
+};
+
+const toUpdateRequest = (p: ParsedProblem): UpdateProblemRequest => ({
+  title: p.title,
+  description: p.description,
+  inputDescription: p.inputDescription,
+  outputDescription: p.outputDescription,
+  timeLimit: Math.round(p.timeLimit * 1000),
+  memoryLimit: Math.round(p.memoryLimit * 1024),
+  difficulty: p.difficulty,
+  tags: p.tags,
+  isPublic: true,
+});
+
+/**
+ * Upload one parsed problem, choosing the path by shape/size:
+ * - @generator file  → create (private) + server-side generation per case
+ * - small file       → single create request (previous behavior)
+ * - big raw file     → create (private) + per-case upload, chunked when needed
+ * Multi-request paths keep the problem private until every case landed, so a
+ * half-uploaded problem is never visible or judged.
+ */
+async function uploadOne(
+  parsed: ParsedProblem,
+  onProgress: (text: string) => void,
+  onCreated: (id: number) => void,
+): Promise<number> {
+  if (parsed.generator) {
+    const gen = parsed.generator;
+    const base = toCreateProblemRequest(parsed);
+    const created = await problemsApi.create({ ...base, isPublic: false });
+    onCreated(created.id);
+    const inlineCount = base.testCases?.length ?? 0;
+    for (let j = 0; j < gen.cases.length; j++) {
+      onProgress(`케이스 ${j + 1}/${gen.cases.length} 생성 중`);
+      try {
+        await problemsApi.generateTestCase(created.id, {
+          generatorLanguage: gen.generatorLanguage,
+          generatorCode: gen.generatorCode,
+          generatorStdin: gen.cases[j].stdin,
+          solutionLanguage: gen.solutionLanguage,
+          solutionCode: gen.solutionCode,
+          orderIndex: inlineCount + j,
+          isSample: gen.cases[j].isSample,
+        });
+      } catch (err) {
+        throw new Error(
+          `케이스 ${j + 1}/${gen.cases.length} 생성 실패: ${uploadErrorMessage(err)}`,
+        );
+      }
+    }
+    if (parsed.isPublic) {
+      await problemsApi.update(created.id, toUpdateRequest(parsed));
+    }
+    return created.id;
+  }
+
+  const fullReq = toCreateProblemRequest(parsed);
+  if (byteSize(fullReq) <= SAFE_REQUEST_BYTES) {
+    const created = await problemsApi.create(fullReq);
+    onCreated(created.id);
+    return created.id;
+  }
+
+  if (parsed.subtasks && parsed.subtasks.length > 0) {
+    throw new Error("파일이 너무 커서 서브태스크 문제는 분할 업로드할 수 없습니다");
+  }
+
+  const created = await problemsApi.create({
+    ...fullReq,
+    testCases: [],
+    isPublic: false,
+  });
+  onCreated(created.id);
+
+  const cases = parsed.testCases;
+  for (let i = 0; i < cases.length; i++) {
+    const label = `테스트케이스 ${i + 1}/${cases.length} 업로드 중`;
+    onProgress(label);
+    const tc = cases[i];
+    try {
+      const oneShot = {
+        input: tc.input,
+        expectedOutput: tc.expectedOutput,
+        orderIndex: i,
+        isSample: tc.isSample,
+      };
+      if (byteSize(oneShot) <= SINGLE_CASE_BYTES) {
+        await problemsApi.addTestCase(created.id, oneShot);
+      } else {
+        const draft = await problemsApi.addTestCase(created.id, {
+          input: "",
+          expectedOutput: "",
+          orderIndex: i,
+          isSample: tc.isSample,
+          draft: true,
+        });
+        const inputChunks = splitChunks(tc.input);
+        const outputChunks = splitChunks(tc.expectedOutput);
+        const totalChunks = inputChunks.length + outputChunks.length;
+        let sent = 0;
+        for (const chunk of inputChunks) {
+          onProgress(`${label} (조각 ${++sent}/${totalChunks})`);
+          await problemsApi.appendTestCaseChunk(created.id, draft.id, {
+            inputChunk: chunk,
+          });
+        }
+        for (const chunk of outputChunks) {
+          onProgress(`${label} (조각 ${++sent}/${totalChunks})`);
+          await problemsApi.appendTestCaseChunk(created.id, draft.id, {
+            expectedOutputChunk: chunk,
+          });
+        }
+        await problemsApi.finalizeTestCase(created.id, draft.id);
+      }
+    } catch (err) {
+      throw new Error(
+        `테스트케이스 ${i + 1}/${cases.length} 업로드 실패: ${uploadErrorMessage(err)}`,
+      );
+    }
+  }
+
+  if (parsed.isPublic) {
+    await problemsApi.update(created.id, toUpdateRequest(parsed));
+  }
+  return created.id;
+}
 
 export default function ImportProblemsPage() {
   const router = useRouter();
@@ -76,29 +245,29 @@ export default function ImportProblemsPage() {
     setUploading(true);
     let ok = 0;
     let failed = 0;
+    const patch = (key: number, p: Partial<ImportItem>) =>
+      setItems((prev) => prev.map((it) => (it.key === key ? { ...it, ...p } : it)));
     // Sequential on purpose: keeps server load low and #id order == list order.
     for (const item of items) {
       if (item.status !== "parsed" || !item.parsed) continue;
-      setItems((prev) =>
-        prev.map((it) => (it.key === item.key ? { ...it, status: "uploading" } : it)),
-      );
+      patch(item.key, { status: "uploading", progress: undefined });
       try {
-        const created = await problemsApi.create(toCreateProblemRequest(item.parsed));
-        ok++;
-        setItems((prev) =>
-          prev.map((it) =>
-            it.key === item.key ? { ...it, status: "done", createdId: created.id } : it,
-          ),
+        const id = await uploadOne(
+          item.parsed,
+          (text) => patch(item.key, { progress: text }),
+          // Record the id as soon as the problem exists so a mid-way failure
+          // still links to the (private) partial problem for inspection.
+          (createdId) => patch(item.key, { createdId }),
         );
+        ok++;
+        patch(item.key, { status: "done", createdId: id, progress: undefined });
       } catch (err) {
         failed++;
         const message =
-          err instanceof ApiError ? err.message : "업로드 실패 (네트워크 오류)";
-        setItems((prev) =>
-          prev.map((it) =>
-            it.key === item.key ? { ...it, status: "failed", message } : it,
-          ),
-        );
+          err instanceof ApiError || err instanceof TypeError || !(err instanceof Error)
+            ? uploadErrorMessage(err)
+            : err.message;
+        patch(item.key, { status: "failed", message, progress: undefined });
       }
     }
     setUploading(false);
@@ -120,6 +289,16 @@ export default function ImportProblemsPage() {
             onClick={() => downloadTextFile("problem-template.md", PROBLEM_TEMPLATE)}
           >
             템플릿 다운로드
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              downloadTextFile("problem-generator-template.md", GENERATOR_TEMPLATE)
+            }
+          >
+            생성기 템플릿
           </Button>
           <Button
             variant="outline"
@@ -235,11 +414,14 @@ export default function ImportProblemsPage() {
                       (it.parsed.subtasks
                         ? ` · 서브태스크 ${it.parsed.subtasks.length}개`
                         : ` · 테스트케이스 ${it.parsed.testCases.length}개`)}
+                    {it.parsed?.generator &&
+                      ` · 생성기 케이스 ${it.parsed.generator.cases.length}개`}
+                    {it.status === "uploading" && it.progress && ` · ${it.progress}`}
                     {it.status === "parse_error" && ` · ⚠️ ${it.message}`}
                     {it.status === "failed" && ` · ❌ ${it.message}`}
                   </p>
                 </div>
-                {it.status === "done" && it.createdId != null ? (
+                {it.createdId != null ? (
                   <Button
                     variant="outline"
                     size="sm"
