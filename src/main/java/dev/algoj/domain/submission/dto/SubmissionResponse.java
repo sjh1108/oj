@@ -21,6 +21,9 @@ public record SubmissionResponse(
         LocalDateTime createdAt
 ) {
     public static SubmissionResponse from(Submission s) {
+        // BOJ-style: runtime/memory only for accepted runs. Anything else would
+        // expose the passed-prefix numbers — meaningless and a test-data probe.
+        boolean showPerf = s.getStatus() == Submission.Status.ACCEPTED;
         return new SubmissionResponse(
                 s.getId(),
                 s.getProblem().getId(),
@@ -28,8 +31,8 @@ public record SubmissionResponse(
                 s.getUser().getUsername(),
                 s.getLanguage(),
                 s.getStatus(),
-                s.getRuntime(),
-                s.getMemory(),
+                showPerf ? s.getRuntime() : null,
+                showPerf ? s.getMemory() : null,
                 s.getPassedTestCases(),
                 s.getTotalTestCases(),
                 s.getScore(),

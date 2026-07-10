@@ -29,6 +29,8 @@ public record SubmissionDetailResponse(
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public static SubmissionDetailResponse from(Submission s) {
+        // BOJ-style: runtime/memory only for accepted runs (see SubmissionResponse).
+        boolean showPerf = s.getStatus() == Submission.Status.ACCEPTED;
         return new SubmissionDetailResponse(
                 s.getId(),
                 s.getProblem().getId(),
@@ -36,8 +38,8 @@ public record SubmissionDetailResponse(
                 s.getUser().getUsername(),
                 s.getLanguage(),
                 s.getStatus(),
-                s.getRuntime(),
-                s.getMemory(),
+                showPerf ? s.getRuntime() : null,
+                showPerf ? s.getMemory() : null,
                 s.getPassedTestCases(),
                 s.getTotalTestCases(),
                 s.getScore(),
