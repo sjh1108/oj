@@ -58,8 +58,7 @@ export default function MySubmissionsPage() {
                 )}
                 <StatusBadge
                   status={s.status}
-                  passed={s.passedTestCases}
-                  total={s.totalTestCases}
+                  progress={s.progress}
                 />
               </div>
             </Link>

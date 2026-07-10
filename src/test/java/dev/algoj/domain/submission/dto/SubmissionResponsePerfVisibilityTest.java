@@ -35,6 +35,20 @@ class SubmissionResponsePerfVisibilityTest {
     }
 
     @Test
+    void judging_exposesPercentProgress_notCounts() {
+        Submission s = submissionWith(Submission.Status.JUDGING);
+        // 1 of 2 cases passed → 50%
+        assertThat(SubmissionResponse.from(s).progress()).isEqualTo(50);
+        assertThat(SubmissionDetailResponse.from(s).progress()).isEqualTo(50);
+    }
+
+    @Test
+    void finishedStatuses_haveNullProgress() {
+        assertThat(SubmissionResponse.from(submissionWith(Submission.Status.ACCEPTED)).progress()).isNull();
+        assertThat(SubmissionResponse.from(submissionWith(Submission.Status.WRONG_ANSWER)).progress()).isNull();
+    }
+
+    @Test
     void accepted_exposesRuntimeAndMemory() {
         Submission s = submissionWith(Submission.Status.ACCEPTED);
         assertThat(SubmissionResponse.from(s).runtime()).isEqualTo(120);

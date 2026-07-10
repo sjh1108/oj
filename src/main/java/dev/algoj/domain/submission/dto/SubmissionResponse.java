@@ -13,8 +13,9 @@ public record SubmissionResponse(
         Submission.Status status,
         Integer runtime,
         Integer memory,
-        Integer passedTestCases,
-        Integer totalTestCases,
+        // Judging progress in percent (0-100) while PENDING/JUDGING, else null.
+        // Absolute test-case counts are deliberately not exposed (BOJ-style).
+        Integer progress,
         Integer score,
         Integer maxScore,
         Boolean isPublic,
@@ -33,12 +34,21 @@ public record SubmissionResponse(
                 s.getStatus(),
                 showPerf ? s.getRuntime() : null,
                 showPerf ? s.getMemory() : null,
-                s.getPassedTestCases(),
-                s.getTotalTestCases(),
+                progressOf(s),
                 s.getScore(),
                 s.getMaxScore(),
                 s.getIsPublic(),
                 s.getCreatedAt()
         );
+    }
+
+    /** 0-100 while pending/judging (floor — 100 only when every case passed), null once final. */
+    static Integer progressOf(Submission s) {
+        if (s.getStatus() == Submission.Status.PENDING) return 0;
+        if (s.getStatus() != Submission.Status.JUDGING) return null;
+        Integer total = s.getTotalTestCases();
+        Integer passed = s.getPassedTestCases();
+        if (total == null || total <= 0 || passed == null) return 0;
+        return (int) ((100L * passed) / total);
     }
 }

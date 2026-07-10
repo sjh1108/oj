@@ -25,6 +25,7 @@ import type {
 
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: "PYTHON3", label: "Python 3" },
+  { value: "PYPY3", label: "PyPy 3" },
   { value: "CPP", label: "C++" },
   { value: "JAVA", label: "Java" },
   { value: "C", label: "C" },

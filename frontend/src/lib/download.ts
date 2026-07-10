@@ -4,6 +4,7 @@ import type { Language } from "@/types/api";
 export const LANGUAGE_EXTENSION: Record<Language, string> = {
   JAVA: "java",
   PYTHON3: "py",
+  PYPY3: "py",
   CPP: "cpp",
   C: "c",
   JAVASCRIPT: "js",

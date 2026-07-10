@@ -86,8 +86,7 @@ export default function SubmissionDetailPage() {
           <h1 className="text-2xl font-semibold">제출 #{s.id}</h1>
           <StatusBadge
             status={s.status}
-            passed={s.passedTestCases}
-            total={s.totalTestCases}
+            progress={s.progress}
             score={s.score}
             maxScore={s.maxScore}
           />

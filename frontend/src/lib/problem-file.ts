@@ -251,6 +251,8 @@ function parseTestCases(region: string): ParsedTestCase[] {
 }
 
 const LANGUAGE_ALIASES: Record<string, Language> = {
+  pypy3: "PYPY3",
+  pypy: "PYPY3",
   python3: "PYTHON3",
   python: "PYTHON3",
   py: "PYTHON3",
@@ -267,7 +269,7 @@ function parseLanguage(raw: string, fenceName: string): Language {
   const lang = LANGUAGE_ALIASES[raw.toLowerCase()];
   if (!lang) {
     throw new Error(
-      `~~~${fenceName} 블록의 언어 '${raw}'를 지원하지 않습니다. (python3, cpp, java, c, javascript)`,
+      `~~~${fenceName} 블록의 언어 '${raw}'를 지원하지 않습니다. (python3, pypy3, cpp, java, c, javascript)`,
     );
   }
   return lang;

@@ -2,7 +2,7 @@ export type Role = "USER" | "ADMIN";
 
 export type Difficulty = "BRONZE" | "SILVER" | "GOLD" | "PLATINUM" | "DIAMOND";
 
-export type Language = "JAVA" | "PYTHON3" | "CPP" | "C" | "JAVASCRIPT";
+export type Language = "JAVA" | "PYTHON3" | "PYPY3" | "CPP" | "C" | "JAVASCRIPT";
 
 export type SubmissionStatus =
   | "PENDING"
@@ -186,8 +186,9 @@ export interface SubmissionResponse {
   status: SubmissionStatus;
   runtime: number | null;
   memory: number | null;
-  passedTestCases: number;
-  totalTestCases: number;
+  // 0-100 while PENDING/JUDGING, null once finished. Absolute test-case
+  // counts are not exposed (BOJ-style).
+  progress: number | null;
   score: number | null;
   maxScore: number | null;
   isPublic: boolean;

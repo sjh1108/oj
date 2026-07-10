@@ -122,8 +122,7 @@ export default function AllSubmissionsPage() {
                     <td className="p-3 text-right">
                       <StatusBadge
                         status={s.status}
-                        passed={s.passedTestCases}
-                        total={s.totalTestCases}
+                        progress={s.progress}
                       />
                     </td>
                   </tr>

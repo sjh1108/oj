@@ -72,6 +72,9 @@ public class Submission {
     @Getter
     public enum Language {
         PYTHON3(71),
+        // Custom Judge0 language — not in stock CE. Must match the id inserted
+        // by deploy/judge0/add-pypy.sql on the Judge0 box.
+        PYPY3(200),
         CPP(54),
         JAVA(62),
         C(50),

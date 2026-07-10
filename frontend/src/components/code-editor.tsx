@@ -7,6 +7,7 @@ const Monaco = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 const LANG_TO_MONACO: Record<string, string> = {
   JAVA: "java",
   PYTHON3: "python",
+  PYPY3: "python",
   CPP: "cpp",
   C: "c",
   JAVASCRIPT: "javascript",
