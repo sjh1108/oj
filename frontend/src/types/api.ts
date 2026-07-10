@@ -135,6 +135,10 @@ export interface GenerateTestCaseRequest {
   generatorStdin?: string;
   solutionLanguage: Language;
   solutionCode: string;
+  // Optional second correct solution — must reproduce the expected output on
+  // the generated input (server rejects the case otherwise).
+  validatorLanguage?: Language;
+  validatorCode?: string;
   orderIndex: number;
   isSample: boolean;
 }
@@ -149,6 +153,7 @@ export interface GenerateTestCaseResponse {
   outputPreview: string;
   generatorRuntimeMs: number | null;
   solutionRuntimeMs: number | null;
+  validatorRuntimeMs: number | null;
 }
 
 export interface SubtaskRequest {

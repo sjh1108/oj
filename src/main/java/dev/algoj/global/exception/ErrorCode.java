@@ -37,6 +37,7 @@ public enum ErrorCode {
     // Test case generation
     GENERATOR_FAILED(HttpStatus.BAD_REQUEST, "G001", "테스트케이스 생성기 실행에 실패했습니다."),
     SOLUTION_FAILED(HttpStatus.BAD_REQUEST, "G002", "모범답안 실행에 실패했습니다."),
+    VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "G003", "검증용 정답 코드가 생성된 테스트케이스를 통과하지 못했습니다."),
 
     // Discord
     INVALID_LINK_CODE(HttpStatus.BAD_REQUEST, "D001", "유효하지 않거나 만료된 연동 코드입니다."),

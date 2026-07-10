@@ -65,6 +65,8 @@ export default function TestCaseManagementPage() {
   const [genStdin, setGenStdin] = useState("");
   const [solLang, setSolLang] = useState<Language>("PYTHON3");
   const [solCode, setSolCode] = useState("");
+  const [valLang, setValLang] = useState<Language>("PYTHON3");
+  const [valCode, setValCode] = useState("");
   const [genOrderIndex, setGenOrderIndex] = useState(0);
   const [genIsSample, setGenIsSample] = useState(false);
   const [genResult, setGenResult] = useState<GenerateTestCaseResponse | null>(
@@ -164,6 +166,8 @@ export default function TestCaseManagementPage() {
       generatorStdin: genStdin || undefined,
       solutionLanguage: solLang,
       solutionCode: solCode,
+      validatorLanguage: valCode.trim() ? valLang : undefined,
+      validatorCode: valCode.trim() ? valCode : undefined,
       orderIndex: genOrderIndex,
       isSample: genIsSample,
     });
@@ -363,6 +367,32 @@ export default function TestCaseManagementPage() {
           </div>
 
           <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">
+                검증용 정답 코드 (선택 — 다른 방식의 두 번째 정답. 생성된 케이스가
+                이 코드로도 풀려야 저장됩니다)
+              </Label>
+              <select
+                value={valLang}
+                onChange={(e) => setValLang(e.target.value as Language)}
+                className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                {LANGUAGES.map((l) => (
+                  <option key={l.value} value={l.value}>
+                    {l.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <CodeEditor
+              language={valLang}
+              value={valCode}
+              onChange={setValCode}
+              height="180px"
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label className="text-xs">
               생성기 stdin (선택 — 시드/파라미터)
             </Label>
@@ -411,6 +441,8 @@ export default function TestCaseManagementPage() {
                   ` · 생성기 ${genResult.generatorRuntimeMs}ms`}
                 {genResult.solutionRuntimeMs != null &&
                   ` · 모범답안 ${genResult.solutionRuntimeMs}ms`}
+                {genResult.validatorRuntimeMs != null &&
+                  ` · 검증 통과 ${genResult.validatorRuntimeMs}ms`}
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>

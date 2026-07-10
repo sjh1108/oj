@@ -16,13 +16,16 @@ public record GenerateTestCaseResponse(
         String inputPreview,
         String outputPreview,
         Integer generatorRuntimeMs,
-        Integer solutionRuntimeMs
+        Integer solutionRuntimeMs,
+        // Null when no validator code was sent.
+        Integer validatorRuntimeMs
 ) {
     private static final int PREVIEW_LENGTH = 500;
 
     public static GenerateTestCaseResponse from(TestCase tc,
                                                 Integer generatorRuntimeMs,
-                                                Integer solutionRuntimeMs) {
+                                                Integer solutionRuntimeMs,
+                                                Integer validatorRuntimeMs) {
         return new GenerateTestCaseResponse(
                 tc.getId(),
                 tc.getOrderIndex(),
@@ -32,7 +35,8 @@ public record GenerateTestCaseResponse(
                 preview(tc.getInput()),
                 preview(tc.getExpectedOutput()),
                 generatorRuntimeMs,
-                solutionRuntimeMs
+                solutionRuntimeMs,
+                validatorRuntimeMs
         );
     }
 

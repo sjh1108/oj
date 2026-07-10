@@ -68,7 +68,23 @@ public class TestCaseGeneratorService {
         }
         String expectedOutput = solRes.stdout() != null ? solRes.stdout() : "";
 
-        // 3) Persist as a regular test case.
+        // 3) Optionally run an independent correct solution against the new case.
+        //    Judge0 does the output comparison (status 3 = Accepted), so the check
+        //    uses exactly the same semantics as real judging.
+        Integer validatorRuntimeMs = null;
+        if (req.validatorCode() != null && !req.validatorCode().isBlank()) {
+            Language validatorLanguage = req.validatorLanguage() != null
+                    ? req.validatorLanguage()
+                    : req.solutionLanguage();
+            Judge0SubmissionResponse valRes = runViaJudge0(
+                    req.validatorCode(), validatorLanguage, input, expectedOutput);
+            if (valRes.status().id() != 3) {
+                throw new BusinessException(ErrorCode.VALIDATION_FAILED, describeFailure(valRes));
+            }
+            validatorRuntimeMs = valRes.runtimeMs();
+        }
+
+        // 4) Persist as a regular test case.
         TestCase tc = TestCase.builder()
                 .input(input)
                 .expectedOutput(expectedOutput)
@@ -78,15 +94,19 @@ public class TestCaseGeneratorService {
         problem.addTestCase(tc);
         TestCase saved = testCaseRepository.save(tc);
 
-        return GenerateTestCaseResponse.from(saved, genRes.runtimeMs(), solRes.runtimeMs());
+        return GenerateTestCaseResponse.from(saved, genRes.runtimeMs(), solRes.runtimeMs(), validatorRuntimeMs);
     }
 
     private Judge0SubmissionResponse runViaJudge0(String sourceCode, Language language, String stdin) {
+        return runViaJudge0(sourceCode, language, stdin, null);
+    }
+
+    private Judge0SubmissionResponse runViaJudge0(String sourceCode, Language language, String stdin, String expectedOutput) {
         Judge0SubmissionRequest req = Judge0SubmissionRequest.of(
                 sourceCode,
                 language.getJudge0Id(),
                 stdin,
-                null,
+                expectedOutput,
                 generateTimeLimitMs,
                 generateMemoryLimitKb,
                 generateMaxFileSizeKb

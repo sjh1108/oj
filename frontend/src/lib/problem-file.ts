@@ -42,6 +42,9 @@ import type {
 //   ~~~solution cpp      # runs on that input; its stdout becomes the answer
 //   ...model solution source...
 //   ~~~
+//   ~~~validator java    # optional second correct solution; every generated
+//   ...verification source...  # case must pass it or the upload is rejected
+//   ~~~
 //   ~~~case sample       # one block per case; body is the generator's stdin
 //   1 5
 //   ~~~
@@ -81,6 +84,10 @@ export interface ParsedGeneratorSpec {
   generatorCode: string;
   solutionLanguage: Language;
   solutionCode: string;
+  // Optional ~~~validator fence — an independent correct solution the server
+  // runs against every generated case to prove it is solvable.
+  validatorLanguage?: Language;
+  validatorCode?: string;
   cases: ParsedGeneratorCase[];
 }
 
@@ -143,41 +150,15 @@ A + B 를 한 줄에 출력한다.
 ~~~output
 12
 ~~~
-`;
-
-// Template for generator-based problems: big test data is produced server-side
-// (generator stdout → input, solution stdout → answer), so only code is uploaded.
-// Generation runs sequentially per case and can take ~10-20s each.
-export const GENERATOR_TEMPLATE = `---
-title: 큰 수의 합
-difficulty: SILVER
-tags: 수학, 구현
-timeLimit: 1
-memoryLimit: 256
-isPublic: true
----
-
-<!-- @description -->
-N개의 수가 주어질 때 그 합을 출력하세요.
-
-<!-- @input -->
-첫째 줄에 N, 둘째 줄에 N개의 정수가 주어진다.
-
-<!-- @output -->
-합을 한 줄에 출력한다.
-
-<!-- @testcases -->
-~~~input sample
-3
-1 2 3
-~~~
-~~~output
-6
-~~~
 
 <!-- @generator -->
+이 섹션은 **선택**입니다. 대용량 테스트케이스를 코드로 만들 때만 쓰고, 필요 없으면
+섹션 전체를 지우세요. 업로드 시 서버가 케이스마다 생성기를 실행해 stdout을 입력으로,
+모범답안의 stdout을 기대 출력으로 저장합니다 (케이스당 10~20초 소요).
+펜스 밖의 이 설명 문장들은 무시되므로 지우지 않아도 됩니다.
+
 ~~~generator python3
-# stdin: "<seed> <n>" — 케이스마다 아래 ~~~case 블록의 내용이 stdin으로 들어옵니다.
+# 케이스마다 아래 ~~~case 블록의 내용이 stdin으로 들어오고,
 # stdout이 그대로 테스트케이스 입력이 됩니다.
 import sys, random
 seed, n = map(int, sys.stdin.read().split())
@@ -186,10 +167,20 @@ print(n)
 print(*[random.randint(1, 10**9) for _ in range(n)])
 ~~~
 ~~~solution python3
-# 위 생성기의 출력이 stdin으로 들어오고, stdout이 기대 출력이 됩니다.
+# 모범답안: 생성기의 출력이 stdin으로 들어오고, stdout이 기대 출력이 됩니다.
 import sys
 data = sys.stdin.read().split()
 print(sum(map(int, data[1:])))
+~~~
+~~~validator python3
+# (선택) 검증용 정답 코드: 다른 방식으로 푼 두 번째 정답.
+# 생성된 각 케이스를 이 코드로도 풀어서 기대 출력과 일치해야만 저장됩니다.
+import sys
+nums = list(map(int, sys.stdin.read().split()))[1:]
+total = 0
+for x in nums:
+    total += x
+print(total)
 ~~~
 ~~~case sample
 1 5
@@ -281,12 +272,13 @@ function parseLanguage(raw: string, fenceName: string): Language {
 function parseGenerator(region: string): ParsedGeneratorSpec {
   let generator: { language: Language; code: string } | null = null;
   let solution: { language: Language; code: string } | null = null;
+  let validator: { language: Language; code: string } | null = null;
   const cases: ParsedGeneratorCase[] = [];
 
   for (const fence of parseFences(region)) {
     const [name, ...rest] = fence.info.split(/\s+/);
     const kind = (name ?? "").toLowerCase();
-    if (kind === "generator" || kind === "solution") {
+    if (kind === "generator" || kind === "solution" || kind === "validator") {
       const langRaw = rest[0];
       if (!langRaw) {
         throw new Error(`~~~${kind} 블록에 언어를 지정하세요. (예: ~~~${kind} python3)`);
@@ -295,9 +287,12 @@ function parseGenerator(region: string): ParsedGeneratorSpec {
       if (kind === "generator") {
         if (generator) throw new Error("~~~generator 블록은 하나만 쓸 수 있습니다.");
         generator = parsed;
-      } else {
+      } else if (kind === "solution") {
         if (solution) throw new Error("~~~solution 블록은 하나만 쓸 수 있습니다.");
         solution = parsed;
+      } else {
+        if (validator) throw new Error("~~~validator 블록은 하나만 쓸 수 있습니다.");
+        validator = parsed;
       }
     } else if (kind === "case") {
       cases.push({
@@ -322,6 +317,8 @@ function parseGenerator(region: string): ParsedGeneratorSpec {
     generatorCode: generator.code,
     solutionLanguage: solution.language,
     solutionCode: solution.code,
+    validatorLanguage: validator?.language,
+    validatorCode: validator?.code,
     cases,
   };
 }
