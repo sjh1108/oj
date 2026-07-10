@@ -49,11 +49,19 @@ server:
 judge0:
   url: ${JUDGE0_URL}
   connect-timeout-ms: 3000
-  read-timeout-ms: 15000
+  # Generous: generation runs two sequential wait=true executions (generator +
+  # solution) of up to generate.time-limit-ms CPU each, plus queue wait.
+  read-timeout-ms: 30000
   generate:
     # Generous limits for generator / model-solution runs (kept under read-timeout-ms).
     time-limit-ms: ${JUDGE0_GENERATE_TIME_LIMIT_MS:10000}
     memory-limit-kb: ${JUDGE0_GENERATE_MEMORY_LIMIT_KB:512000}
+    # Judge0 fsize for generator/solution stdout. Values above 4096 also need
+    # MAX_MAX_FILE_SIZE raised on the Judge0 deployment itself.
+    max-file-size-kb: ${JUDGE0_GENERATE_MAX_FILE_SIZE_KB:4096}
+  judge:
+    # fsize for contestant runs — outputs for generated test data can be multi-MB.
+    max-file-size-kb: ${JUDGE0_JUDGE_MAX_FILE_SIZE_KB:4096}
 
 jwt:
   secret: ${JWT_SECRET}

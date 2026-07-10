@@ -39,17 +39,24 @@ public class TestCase {
     @Column(nullable = false)
     private Boolean isSample;
 
+    // Mid-(chunked)-upload marker — draft cases are excluded from judging and
+    // sample display until the uploader finalizes them.
+    @Column(nullable = false)
+    private Boolean isDraft;
+
     @Builder
     private TestCase(Problem problem,
                      String input,
                      String expectedOutput,
                      Integer orderIndex,
-                     Boolean isSample) {
+                     Boolean isSample,
+                     Boolean isDraft) {
         this.problem = problem;
         this.input = input;
         this.expectedOutput = expectedOutput;
         this.orderIndex = orderIndex;
         this.isSample = isSample;
+        this.isDraft = isDraft != null ? isDraft : Boolean.FALSE;
     }
 
     void assignProblem(Problem problem) {

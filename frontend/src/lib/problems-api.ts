@@ -1,5 +1,6 @@
 import { api } from "@/lib/api";
 import type {
+  AppendTestCaseChunkRequest,
   CreateProblemRequest,
   GenerateTestCaseRequest,
   GenerateTestCaseResponse,
@@ -9,6 +10,7 @@ import type {
   ProblemListParams,
   TestCaseRequest,
   TestCaseResponse,
+  TestCaseUploadStatusResponse,
 } from "@/types/api";
 
 export interface UpdateProblemRequest {
@@ -59,6 +61,20 @@ export const problemsApi = {
       method: "PUT",
       body,
     }),
+  appendTestCaseChunk: (
+    problemId: number,
+    tcId: number,
+    body: AppendTestCaseChunkRequest,
+  ) =>
+    api<TestCaseUploadStatusResponse>(
+      `/api/problems/${problemId}/test-cases/${tcId}/append`,
+      { method: "PATCH", body },
+    ),
+  finalizeTestCase: (problemId: number, tcId: number) =>
+    api<TestCaseUploadStatusResponse>(
+      `/api/problems/${problemId}/test-cases/${tcId}/finalize`,
+      { method: "POST" },
+    ),
   deleteTestCase: (problemId: number, tcId: number) =>
     api<void>(`/api/problems/${problemId}/test-cases/${tcId}`, {
       method: "DELETE",

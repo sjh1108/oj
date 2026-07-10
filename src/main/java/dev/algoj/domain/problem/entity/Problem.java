@@ -142,6 +142,13 @@ public class Problem {
         this.isPublic = isPublic;
     }
 
+    /** Test cases eligible for judging/serving — excludes drafts still being chunk-uploaded. */
+    public List<TestCase> getActiveTestCases() {
+        return this.testCases.stream()
+                .filter(tc -> !Boolean.TRUE.equals(tc.getIsDraft()))
+                .toList();
+    }
+
     public void addTestCase(TestCase testCase) {
         this.testCases.add(testCase);
         testCase.assignProblem(this);

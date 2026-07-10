@@ -7,7 +7,8 @@ public record TestCaseResponse(
         String input,
         String expectedOutput,
         Integer orderIndex,
-        Boolean isSample
+        Boolean isSample,
+        Boolean isDraft
 ) {
     public static TestCaseResponse from(TestCase tc) {
         return new TestCaseResponse(
@@ -15,7 +16,8 @@ public record TestCaseResponse(
                 tc.getInput(),
                 tc.getExpectedOutput(),
                 tc.getOrderIndex(),
-                tc.getIsSample()
+                tc.getIsSample(),
+                tc.getIsDraft()
         );
     }
 }

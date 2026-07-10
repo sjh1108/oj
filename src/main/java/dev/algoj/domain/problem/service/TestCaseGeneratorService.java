@@ -40,6 +40,9 @@ public class TestCaseGeneratorService {
     @Value("${judge0.generate.memory-limit-kb}")
     private int generateMemoryLimitKb;
 
+    @Value("${judge0.generate.max-file-size-kb}")
+    private int generateMaxFileSizeKb;
+
     @Transactional
     public GenerateTestCaseResponse generate(Long problemId, GenerateTestCaseRequest req) {
         Problem problem = problemRepository.findById(problemId)
@@ -85,7 +88,8 @@ public class TestCaseGeneratorService {
                 stdin,
                 null,
                 generateTimeLimitMs,
-                generateMemoryLimitKb
+                generateMemoryLimitKb,
+                generateMaxFileSizeKb
         );
         return judge0Client.submitAndWait(req);
     }

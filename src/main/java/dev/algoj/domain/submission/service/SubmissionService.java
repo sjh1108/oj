@@ -38,7 +38,7 @@ public class SubmissionService {
         Problem problem = problemRepository.findById(req.problemId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROBLEM_NOT_FOUND));
 
-        List<TestCase> testCases = problem.getTestCases();
+        List<TestCase> testCases = problem.getActiveTestCases();
         if (testCases.isEmpty()) {
             throw new BusinessException(ErrorCode.NO_TEST_CASES);
         }
@@ -127,7 +127,7 @@ public class SubmissionService {
     public Long resetForRejudge(Long submissionId) {
         Submission s = submissionRepository.findById(submissionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SUBMISSION_NOT_FOUND));
-        int total = s.getProblem().getTestCases().size();
+        int total = s.getProblem().getActiveTestCases().size();
         s.resetForRejudge(total);
         return s.getId();
     }
@@ -136,7 +136,7 @@ public class SubmissionService {
     public List<Long> resetAllForProblemRejudge(Long problemId) {
         Problem problem = problemRepository.findById(problemId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.PROBLEM_NOT_FOUND));
-        int total = problem.getTestCases().size();
+        int total = problem.getActiveTestCases().size();
         List<Submission> submissions = submissionRepository.findAllByProblemId(problemId);
         return submissions.stream()
                 .peek(s -> s.resetForRejudge(total))
