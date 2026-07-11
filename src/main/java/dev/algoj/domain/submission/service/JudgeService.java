@@ -33,6 +33,10 @@ public class JudgeService {
 
     private static final int DEFAULT_PROBLEM_POINTS = 100;
 
+    // Extra wait on top of the problem's time limit for Judge0 queueing and
+    // multi-MB stdin/stdout transfer before the wait=true call is given up on.
+    private static final int JUDGE0_WAIT_MARGIN_MS = 15_000;
+
     private final SubmissionRepository submissionRepository;
     private final Judge0Client judge0Client;
     private final ObjectMapper objectMapper;
@@ -90,7 +94,8 @@ public class JudgeService {
                         problem.getMemoryLimit(),
                         judgeMaxFileSizeKb
                 );
-                Judge0SubmissionResponse res = judge0Client.submitAndWait(req);
+                Judge0SubmissionResponse res = judge0Client.submitAndWait(
+                        req, problem.getTimeLimit() + JUDGE0_WAIT_MARGIN_MS);
                 Submission.Status tcStatus = Judge0StatusMapper.toSubmissionStatus(res.status().id());
 
                 if (tcStatus == Submission.Status.ACCEPTED) {

@@ -82,7 +82,7 @@ class JudgeServiceSubtaskTest {
         Submission s = submissionFor(problemWithTwoSubtasks(), 3);
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
         // ST1 (1 tc) → AC; ST2 first tc → WA (breaks that subtask).
-        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class)))
+        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class), any()))
                 .thenReturn(judge0(AC), judge0(WA));
 
         service.judge(1L);
@@ -98,7 +98,7 @@ class JudgeServiceSubtaskTest {
     void fullScore_whenAllSubtasksPass() {
         Submission s = submissionFor(problemWithTwoSubtasks(), 3);
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
-        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class)))
+        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class), any()))
                 .thenReturn(judge0(AC));
 
         service.judge(1L);
@@ -115,7 +115,7 @@ class JudgeServiceSubtaskTest {
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
         // ST1 first tc → WA (0), ST2 both pass → 70. So actually partial; to force zero,
         // make every test case fail.
-        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class)))
+        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class), any()))
                 .thenReturn(judge0(WA));
 
         service.judge(1L);
@@ -138,12 +138,12 @@ class JudgeServiceSubtaskTest {
 
         Submission s = submissionFor(problem, 1);
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
-        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class)))
+        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class), any()))
                 .thenReturn(judge0(AC));
 
         service.judge(1L);
 
-        verify(judge0Client, times(1)).submitAndWait(any(Judge0SubmissionRequest.class));
+        verify(judge0Client, times(1)).submitAndWait(any(Judge0SubmissionRequest.class), any());
         assertThat(s.getStatus()).isEqualTo(Submission.Status.ACCEPTED);
         assertThat(s.getPassedTestCases()).isEqualTo(1);
     }
@@ -161,7 +161,7 @@ class JudgeServiceSubtaskTest {
 
         Submission s = submissionFor(problem, 2);
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
-        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class)))
+        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class), any()))
                 .thenReturn(judge0(AC));
 
         service.judge(1L);
