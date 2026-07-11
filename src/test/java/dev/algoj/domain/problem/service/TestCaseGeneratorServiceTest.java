@@ -97,12 +97,51 @@ class TestCaseGeneratorServiceTest {
         verify(testCaseRepository, never()).save(any());
     }
 
+    @Test
+    void generate_withValidator_runsThreeTimes_andStoresOnAccepted() {
+        when(judge0Client.submitAndWait(any()))
+                .thenReturn(okResponse("5\n"))     // generator
+                .thenReturn(okResponse("15\n"))    // solution
+                .thenReturn(okResponse("15\n"));   // validator (Judge0 says Accepted)
+        when(testCaseRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        GenerateTestCaseResponse res = service.generate(1L, requestWithValidator());
+
+        verify(judge0Client, times(3)).submitAndWait(any());
+        verify(testCaseRepository).save(any());
+        assertThat(res.validatorRuntimeMs()).isNotNull();
+    }
+
+    @Test
+    void generate_whenValidatorWrongAnswer_throwsValidationFailed_andDoesNotStore() {
+        when(judge0Client.submitAndWait(any()))
+                .thenReturn(okResponse("5\n"))
+                .thenReturn(okResponse("15\n"))
+                .thenReturn(wrongAnswerResponse("14\n"));
+
+        assertThatThrownBy(() -> service.generate(1L, requestWithValidator()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.VALIDATION_FAILED);
+
+        verify(testCaseRepository, never()).save(any());
+    }
+
     // ── helpers ──────────────────────────────────────────────
 
     private GenerateTestCaseRequest request() {
         return new GenerateTestCaseRequest(
                 Language.PYTHON3, "print(5)", null,
                 Language.PYTHON3, "print(15)",
+                null, null,
+                0, false);
+    }
+
+    private GenerateTestCaseRequest requestWithValidator() {
+        return new GenerateTestCaseRequest(
+                Language.PYTHON3, "print(5)", null,
+                Language.PYTHON3, "print(15)",
+                Language.PYTHON3, "print(5+10)",
                 0, false);
     }
 
@@ -119,6 +158,12 @@ class TestCaseGeneratorServiceTest {
         return new Judge0SubmissionResponse(
                 stdout, null, null, null, "0.05", 1024, "tok",
                 new Judge0SubmissionResponse.Status(3, "Accepted"));
+    }
+
+    private Judge0SubmissionResponse wrongAnswerResponse(String stdout) {
+        return new Judge0SubmissionResponse(
+                stdout, null, null, null, "0.05", 1024, "tok",
+                new Judge0SubmissionResponse.Status(4, "Wrong Answer"));
     }
 
     private Judge0SubmissionResponse compileErrorResponse() {

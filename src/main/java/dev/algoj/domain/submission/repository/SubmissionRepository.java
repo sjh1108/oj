@@ -15,6 +15,12 @@ public interface SubmissionRepository extends JpaRepository<Submission, Long> {
 
     List<Submission> findAllByProblemId(Long problemId);
 
+    // Sweeper: stale PENDING rows whose queue message was likely lost.
+    List<Submission> findTop50ByStatusAndCreatedAtBeforeOrderByIdAsc(
+            Submission.Status status,
+            java.time.LocalDateTime cutoff
+    );
+
     boolean existsByUserIdAndProblemIdAndStatus(Long userId, Long problemId, Submission.Status status);
 
     Page<Submission> findAllByProblemIdAndStatusAndIsPublicTrue(

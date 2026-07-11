@@ -57,6 +57,7 @@ function normalizeOutput(s: string | null | undefined): string {
 const LANGUAGES: { value: Language; label: string }[] = [
   { value: "JAVA", label: "Java" },
   { value: "PYTHON3", label: "Python 3" },
+  { value: "PYPY3", label: "PyPy 3" },
   { value: "CPP", label: "C++" },
   { value: "C", label: "C" },
   { value: "JAVASCRIPT", label: "JavaScript" },
@@ -66,6 +67,7 @@ const DEFAULT_LANGUAGE: Language = "JAVA";
 
 const STARTER: Record<Language, string> = {
   PYTHON3: "import sys\ninput = sys.stdin.readline\n\n",
+  PYPY3: "import sys\ninput = sys.stdin.readline\n\n",
   JAVA:
     "import java.util.*;\n\npublic class Main {\n  public static void main(String[] args) {\n    \n  }\n}\n",
   CPP:

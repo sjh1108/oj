@@ -33,21 +33,17 @@ const STATUS_CLASS: Record<SubmissionStatus, string> = {
 
 export function StatusBadge({
   status,
-  passed,
-  total,
+  progress,
   score,
   maxScore,
 }: {
   status: SubmissionStatus;
-  passed?: number;
-  total?: number;
+  // 0-100 while judging (from the API); counts are never exposed.
+  progress?: number | null;
   score?: number | null;
   maxScore?: number | null;
 }) {
-  const showProgress =
-    (status === "PENDING" || status === "JUDGING") &&
-    total !== undefined &&
-    total > 0;
+  const showProgress = status === "JUDGING" && progress != null;
   // Show the earned score for partial results (and full-score subtask problems).
   const showScore =
     (status === "PARTIAL" || status === "ACCEPTED") &&
@@ -56,7 +52,7 @@ export function StatusBadge({
     maxScore > 0;
 
   let label = STATUS_LABEL[status];
-  if (showProgress) label = `채점 ${passed ?? 0}/${total}`;
+  if (showProgress) label = `채점중 ${progress}%`;
   else if (status === "PARTIAL" && showScore) label = `부분 ${score}/${maxScore}`;
   else if (status === "ACCEPTED" && showScore && score < maxScore!)
     label = `${score}/${maxScore}`;

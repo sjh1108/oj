@@ -24,6 +24,12 @@ public record GenerateTestCaseRequest(
         @NotBlank(message = "solutionCode는 필수입니다.")
         String solutionCode,
 
+        // Optional second correct solution: after generating, it is run against
+        // the new input and must reproduce the expected output (Judge0-compared),
+        // proving the case is solvable. Language defaults to solutionLanguage.
+        Language validatorLanguage,
+        String validatorCode,
+
         @NotNull(message = "orderIndex는 필수입니다.")
         Integer orderIndex,
 

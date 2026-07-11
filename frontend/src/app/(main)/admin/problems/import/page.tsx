@@ -14,7 +14,6 @@ import {
   parseProblemFile,
   toCreateProblemRequest,
   PROBLEM_TEMPLATE,
-  GENERATOR_TEMPLATE,
   type ParsedProblem,
 } from "@/lib/problem-file";
 import { Badge } from "@/components/ui/badge";
@@ -117,6 +116,8 @@ async function uploadOne(
           generatorStdin: gen.cases[j].stdin,
           solutionLanguage: gen.solutionLanguage,
           solutionCode: gen.solutionCode,
+          validatorLanguage: gen.validatorLanguage,
+          validatorCode: gen.validatorCode,
           orderIndex: inlineCount + j,
           isSample: gen.cases[j].isSample,
         });
@@ -289,16 +290,6 @@ export default function ImportProblemsPage() {
             onClick={() => downloadTextFile("problem-template.md", PROBLEM_TEMPLATE)}
           >
             템플릿 다운로드
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              downloadTextFile("problem-generator-template.md", GENERATOR_TEMPLATE)
-            }
-          >
-            생성기 템플릿
           </Button>
           <Button
             variant="outline"

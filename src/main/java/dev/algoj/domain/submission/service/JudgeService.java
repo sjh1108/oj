@@ -64,7 +64,9 @@ public class JudgeService {
         Problem problem = s.getProblem();
         List<Group> groups = buildGroups(problem);
 
-        s.markJudging();
+        // Fresh active-case count — drafts may have been finalized (or added)
+        // between submit time and judge time.
+        s.markJudging(groups.stream().mapToInt(g -> g.testCases().size()).sum());
         submissionRepository.flush();
 
         int maxScore = groups.stream().mapToInt(Group::points).sum();

@@ -72,6 +72,9 @@ public class Submission {
     @Getter
     public enum Language {
         PYTHON3(71),
+        // Custom Judge0 language — not in stock CE. Must match the id inserted
+        // by deploy/judge0/add-pypy.sql on the Judge0 box.
+        PYPY3(200),
         CPP(54),
         JAVA(62),
         C(50),
@@ -107,8 +110,21 @@ public class Submission {
         this.isPublic = true;
     }
 
-    public void markJudging() {
+    /**
+     * Enters JUDGING and resets per-run counters. A judge run can be redelivered
+     * (worker killed mid-judge, sweeper requeue) — starting from zero keeps the
+     * rerun from double-counting cases the first attempt already flushed.
+     */
+    public void markJudging(int totalTestCases) {
         this.status = Status.JUDGING;
+        this.totalTestCases = totalTestCases;
+        this.passedTestCases = 0;
+        this.runtime = null;
+        this.memory = null;
+        this.errorMessage = null;
+        this.score = null;
+        this.maxScore = null;
+        this.subtaskResultsJson = null;
     }
 
     public void incrementPassed(Integer runtimeMs, Integer memoryKb) {
