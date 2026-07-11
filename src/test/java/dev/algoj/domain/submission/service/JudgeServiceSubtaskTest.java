@@ -14,6 +14,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.Optional;
 
@@ -35,7 +40,23 @@ class JudgeServiceSubtaskTest {
 
     @BeforeEach
     void setUp() {
-        service = new JudgeService(submissionRepository, judge0Client, new ObjectMapper());
+        // Real TransactionTemplate over a no-op manager: stage boundaries run,
+        // commits are irrelevant to the in-memory mocks.
+        TransactionTemplate tx = new TransactionTemplate(new PlatformTransactionManager() {
+            @Override
+            public TransactionStatus getTransaction(TransactionDefinition definition) {
+                return new SimpleTransactionStatus();
+            }
+
+            @Override
+            public void commit(TransactionStatus status) {
+            }
+
+            @Override
+            public void rollback(TransactionStatus status) {
+            }
+        });
+        service = new JudgeService(submissionRepository, judge0Client, new ObjectMapper(), tx);
     }
 
     private static final int AC = 3;   // Judge0 "Accepted"
