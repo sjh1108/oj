@@ -38,7 +38,10 @@ out/
 
 ### Workflow / local-only ###
 /tasks/
-/.claude/
+# Claude Code: 개인 설정만 무시하고 팀 공유 설정(settings.json)은 커밋
+/.claude/*
+!/.claude/settings.json
+!/.claude/rules/
 
 ### env files (concrete .env files are local-only, *.example templates are committed) ###
 .env

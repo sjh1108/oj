@@ -21,16 +21,25 @@ import java.util.Base64;
 @RequiredArgsConstructor
 public class Judge0Client {
 
-    private final RestClient judge0RestClient;
+    private final Judge0ClientProvider judge0Clients;
     private final ObjectMapper objectMapper;
 
     public Judge0SubmissionResponse submitAndWait(Judge0SubmissionRequest plain) {
+        return submitAndWait(plain, null);
+    }
+
+    /**
+     * @param readTimeoutMs how long to hold the wait=true connection — pass the
+     *                      problem's time limit plus margin so a legally slow run
+     *                      isn't cut off; null uses the configured default.
+     */
+    public Judge0SubmissionResponse submitAndWait(Judge0SubmissionRequest plain, Integer readTimeoutMs) {
         try {
             Judge0SubmissionRequest encoded = encodeRequest(plain);
             String json = objectMapper.writeValueAsString(encoded);
             log.debug("Judge0 request body: {}", json);
 
-            String rawBody = judge0RestClient.post()
+            String rawBody = judge0Clients.withReadTimeout(readTimeoutMs).post()
                     .uri(uri -> uri.path("/submissions")
                             .queryParam("base64_encoded", "true")
                             .queryParam("wait", "true")
@@ -79,7 +88,7 @@ public class Judge0Client {
     /** Cheap liveness probe for monitoring — true when Judge0 answers /languages. */
     public boolean isUp() {
         try {
-            judge0RestClient.get()
+            judge0Clients.withReadTimeout(null).get()
                     .uri("/languages")
                     .retrieve()
                     .toBodilessEntity();

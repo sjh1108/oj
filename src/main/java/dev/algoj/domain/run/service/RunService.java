@@ -49,7 +49,10 @@ public class RunService {
                 judgeMaxFileSizeKb
         );
 
-        Judge0SubmissionResponse res = judge0Client.submitAndWait(judge0Req);
+        // Direct runs execute with the problem's time limit too — wait at least
+        // that long (plus queue/transfer margin) before giving up.
+        Judge0SubmissionResponse res = judge0Client.submitAndWait(
+                judge0Req, problem.getTimeLimit() + 15_000);
 
         return new RunResponse(
                 Judge0Results.mapStatus(res.status().id()),
