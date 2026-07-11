@@ -15,16 +15,23 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Grades one submission against Judge0. Runs on RabbitMQ listener threads
  * (see {@link JudgeQueueListener}); exceptions are swallowed into SYSTEM_ERROR
  * so a poison submission never loops back onto the queue.
+ *
+ * Deliberately NOT one big transaction: the flip to JUDGING and each
+ * passed-case increment are committed in their own short transactions so the
+ * polling frontend sees live percent progress (an uncommitted flush is
+ * invisible to other connections). A run interrupted between commits is healed
+ * by queue redelivery + markJudging()'s counter reset.
  */
 @Slf4j
 @Service
@@ -40,67 +47,82 @@ public class JudgeService {
     private final SubmissionRepository submissionRepository;
     private final Judge0Client judge0Client;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     // Contestant runs may legitimately print multi-MB outputs for generated
     // test data — Judge0's default 1024KB fsize would truncate them.
     @Value("${judge0.judge.max-file-size-kb}")
     private int judgeMaxFileSizeKb;
 
-    @Transactional
     public void judge(Long submissionId) {
-        Submission s = submissionRepository.findById(submissionId).orElse(null);
-        if (s == null) {
-            log.warn("Submission {} not found for judging", submissionId);
-            return;
-        }
         try {
-            doJudge(s);
+            JudgePlan plan = transactionTemplate.execute(status -> loadPlan(submissionId));
+            if (plan == null) {
+                log.warn("Submission {} not found for judging", submissionId);
+                return;
+            }
+            doJudge(submissionId, plan);
         } catch (Exception e) {
             log.error("Judging submission {} failed", submissionId, e);
-            s.updateResult(Submission.Status.SYSTEM_ERROR, null, null, e.getMessage());
+            recordSystemError(submissionId, e.getMessage());
         }
     }
 
-    /** A scored group of test cases — a real subtask, or the implicit whole-problem group. */
-    private record Group(String label, int points, List<TestCase> testCases) {}
+    /** Everything a judge run needs, detached from the persistence context. */
+    private record PlannedCase(String input, String expectedOutput) {}
+    private record PlannedGroup(String label, int points, List<PlannedCase> cases) {}
+    private record JudgePlan(String sourceCode,
+                             int judge0LanguageId,
+                             int timeLimitMs,
+                             int memoryLimitKb,
+                             List<PlannedGroup> groups) {}
 
-    private void doJudge(Submission s) {
+    private JudgePlan loadPlan(Long submissionId) {
+        Submission s = submissionRepository.findById(submissionId).orElse(null);
+        if (s == null) return null;
         Problem problem = s.getProblem();
-        List<Group> groups = buildGroups(problem);
+        return new JudgePlan(
+                s.getSourceCode(),
+                s.getLanguage().getJudge0Id(),
+                problem.getTimeLimit(),
+                problem.getMemoryLimit(),
+                buildGroups(problem));
+    }
 
-        // Fresh active-case count — drafts may have been finalized (or added)
-        // between submit time and judge time.
-        s.markJudging(groups.stream().mapToInt(g -> g.testCases().size()).sum());
-        submissionRepository.flush();
+    private void doJudge(Long submissionId, JudgePlan plan) {
+        int totalCases = plan.groups().stream().mapToInt(g -> g.cases().size()).sum();
+        // Committed immediately — pollers flip to "채점중 0%" now. Also resets
+        // counters so a redelivered run never double-counts.
+        updateSubmission(submissionId, s -> s.markJudging(totalCases));
 
-        int maxScore = groups.stream().mapToInt(Group::points).sum();
+        int maxScore = plan.groups().stream().mapToInt(PlannedGroup::points).sum();
         int totalScore = 0;
         // First failing test case overall — used as the status when nothing scores.
         Submission.Status firstFailure = null;
         String errorMessage = null;
         List<SubtaskResultDto> results = new ArrayList<>();
 
-        for (Group group : groups) {
+        for (PlannedGroup group : plan.groups()) {
             boolean passed = true;
             Submission.Status groupStatus = Submission.Status.ACCEPTED;
 
-            for (TestCase tc : group.testCases()) {
+            for (PlannedCase tc : group.cases()) {
                 Judge0SubmissionRequest req = Judge0SubmissionRequest.of(
-                        s.getSourceCode(),
-                        s.getLanguage().getJudge0Id(),
-                        tc.getInput(),
-                        tc.getExpectedOutput(),
-                        problem.getTimeLimit(),
-                        problem.getMemoryLimit(),
+                        plan.sourceCode(),
+                        plan.judge0LanguageId(),
+                        tc.input(),
+                        tc.expectedOutput(),
+                        plan.timeLimitMs(),
+                        plan.memoryLimitKb(),
                         judgeMaxFileSizeKb
                 );
                 Judge0SubmissionResponse res = judge0Client.submitAndWait(
-                        req, problem.getTimeLimit() + JUDGE0_WAIT_MARGIN_MS);
+                        req, plan.timeLimitMs() + JUDGE0_WAIT_MARGIN_MS);
                 Submission.Status tcStatus = Judge0StatusMapper.toSubmissionStatus(res.status().id());
 
                 if (tcStatus == Submission.Status.ACCEPTED) {
-                    s.incrementPassed(res.runtimeMs(), res.memory());
-                    submissionRepository.flush();
+                    // Own committed transaction per case → live progress for pollers.
+                    updateSubmission(submissionId, s -> s.incrementPassed(res.runtimeMs(), res.memory()));
                 } else {
                     passed = false;
                     groupStatus = tcStatus;
@@ -127,29 +149,52 @@ public class JudgeService {
             finalStatus = firstFailure != null ? firstFailure : Submission.Status.WRONG_ANSWER;
         }
 
-        s.updateScore(totalScore, maxScore, toJson(results));
-        s.updateResult(finalStatus, null, null, errorMessage);
+        int score = totalScore;
+        Submission.Status status = finalStatus;
+        String message = errorMessage;
+        String resultsJson = toJson(results);
+        updateSubmission(submissionId, s -> {
+            s.updateScore(score, maxScore, resultsJson);
+            s.updateResult(status, null, null, message);
+        });
+    }
+
+    /** Loads, mutates, and commits the submission in its own short transaction. */
+    private void updateSubmission(Long submissionId, Consumer<Submission> mutation) {
+        transactionTemplate.executeWithoutResult(status ->
+                submissionRepository.findById(submissionId).ifPresent(mutation));
+    }
+
+    private void recordSystemError(Long submissionId, String message) {
+        try {
+            updateSubmission(submissionId, s ->
+                    s.updateResult(Submission.Status.SYSTEM_ERROR, null, null, message));
+        } catch (Exception e) {
+            log.error("Failed to record SYSTEM_ERROR for submission {}", submissionId, e);
+        }
     }
 
     /** Real subtasks if defined, else one implicit group holding every test case. */
-    private List<Group> buildGroups(Problem problem) {
+    private List<PlannedGroup> buildGroups(Problem problem) {
         List<Subtask> subtasks = problem.getSubtasks();
         if (subtasks != null && !subtasks.isEmpty()) {
             return subtasks.stream()
                     .sorted(Comparator.comparing(Subtask::getOrderIndex))
-                    .map(st -> new Group(
+                    .map(st -> new PlannedGroup(
                             st.getLabel(),
                             st.getPoints(),
                             st.getTestCases().stream()
                                     .filter(tc -> !Boolean.TRUE.equals(tc.getIsDraft()))
                                     .sorted(Comparator.comparing(TestCase::getOrderIndex))
+                                    .map(tc -> new PlannedCase(tc.getInput(), tc.getExpectedOutput()))
                                     .toList()))
                     .toList();
         }
-        List<TestCase> all = problem.getActiveTestCases().stream()
+        List<PlannedCase> all = problem.getActiveTestCases().stream()
                 .sorted(Comparator.comparing(TestCase::getOrderIndex))
+                .map(tc -> new PlannedCase(tc.getInput(), tc.getExpectedOutput()))
                 .toList();
-        return List.of(new Group("전체", DEFAULT_PROBLEM_POINTS, all));
+        return List.of(new PlannedGroup("전체", DEFAULT_PROBLEM_POINTS, all));
     }
 
     private String toJson(List<SubtaskResultDto> results) {
