@@ -3,5 +3,8 @@
     "allow": [
       "mcp__github"
     ]
+  },
+  "attribution": {
+    "pr": ""
   }
 }
