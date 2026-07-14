@@ -56,6 +56,14 @@ export const MarkdownEditor = React.forwardRef<HTMLTextAreaElement, Props>(
     };
 
     const handleFile = async (file: File) => {
+      // Pre-check before upload: base64 of anything much over 700KB would blow
+      // past nginx's 1MB body limit and die as an opaque network error there,
+      // never reaching the server's friendly validation message.
+      if (file.size > 700 * 1024) {
+        toast.error("이미지가 너무 큽니다 (700KB 이하). 압축하거나 WebP 변환을 권장합니다.");
+        if (fileRef.current) fileRef.current.value = "";
+        return;
+      }
       setUploading(true);
       try {
         const dataUrl = await new Promise<string>((resolve, reject) => {
