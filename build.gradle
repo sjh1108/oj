@@ -26,6 +26,10 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-web'
 
+    // AWS S3 (problem statement images)
+    implementation platform('software.amazon.awssdk:bom:2.29.9')
+    implementation 'software.amazon.awssdk:s3'
+
     // DB migrations
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-mysql'

@@ -25,6 +25,7 @@ export function Markdown({ children, className, style }: Props) {
         "prose prose-sm dark:prose-invert max-w-none break-words",
         "prose-pre:bg-muted prose-pre:text-foreground",
         "prose-code:before:content-none prose-code:after:content-none",
+        "prose-img:max-w-full prose-img:rounded-lg prose-img:border prose-img:mx-auto",
         className,
       )}
     >

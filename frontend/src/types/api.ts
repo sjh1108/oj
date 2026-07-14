@@ -243,6 +243,15 @@ export interface PageResponse<T> {
   empty: boolean;
 }
 
+export interface UploadImageRequest {
+  contentType: string;
+  base64Data: string;
+}
+
+export interface UploadImageResponse {
+  url: string;
+}
+
 export interface ErrorResponse {
   code: string;
   message: string;

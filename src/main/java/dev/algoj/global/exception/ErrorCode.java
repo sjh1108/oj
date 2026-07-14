@@ -39,6 +39,11 @@ public enum ErrorCode {
     SOLUTION_FAILED(HttpStatus.BAD_REQUEST, "G002", "모범답안 실행에 실패했습니다."),
     VALIDATION_FAILED(HttpStatus.BAD_REQUEST, "G003", "검증용 정답 코드가 생성된 테스트케이스를 통과하지 못했습니다."),
 
+    // Problem images (S3)
+    IMAGE_TOO_LARGE(HttpStatus.BAD_REQUEST, "I001", "이미지가 너무 큽니다. (최대 700KB)"),
+    IMAGE_TYPE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "I002", "지원하지 않는 이미지 형식입니다. (png/jpeg/gif/webp/svg)"),
+    IMAGE_STORAGE_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "I003", "이미지 저장소(S3)가 설정되지 않았습니다."),
+
     // Discord
     INVALID_LINK_CODE(HttpStatus.BAD_REQUEST, "D001", "유효하지 않거나 만료된 연동 코드입니다."),
     DISCORD_ALREADY_LINKED(HttpStatus.CONFLICT, "D002", "이미 다른 계정에 연동된 디스코드 사용자입니다."),

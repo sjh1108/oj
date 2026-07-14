@@ -327,6 +327,7 @@ export default function NewProblemPage() {
                 name="description"
                 render={({ field }) => (
                   <MarkdownEditor
+                    imageUpload
                     id="description"
                     value={field.value}
                     onChange={field.onChange}

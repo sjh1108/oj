@@ -11,6 +11,8 @@ import { problemsApi, type UpdateProblemRequest } from "@/lib/problems-api";
 import { useAuthStore } from "@/lib/auth-store";
 import { downloadTextFile } from "@/lib/download";
 import {
+  applyAssetUrls,
+  assetReferenceNames,
   parseProblemFile,
   toCreateProblemRequest,
   PROBLEM_TEMPLATE,
@@ -101,6 +103,29 @@ async function uploadOne(
   onProgress: (text: string) => void,
   onCreated: (id: number) => void,
 ): Promise<number> {
+  if (parsed.assets?.length) {
+    // Push referenced images to S3 first, then rewrite ](asset:이름) links to
+    // the returned URLs so the created problem only contains plain image URLs.
+    const referenced = new Set(assetReferenceNames(parsed));
+    const toUpload = parsed.assets.filter((a) => referenced.has(a.name));
+    const urls: Record<string, string> = {};
+    for (let k = 0; k < toUpload.length; k++) {
+      onProgress(`이미지 ${k + 1}/${toUpload.length} 업로드 중`);
+      try {
+        const { url } = await problemsApi.uploadImage({
+          contentType: toUpload[k].contentType,
+          base64Data: toUpload[k].base64,
+        });
+        urls[toUpload[k].name] = url;
+      } catch (err) {
+        throw new Error(
+          `이미지 '${toUpload[k].name}' 업로드 실패: ${uploadErrorMessage(err)}`,
+        );
+      }
+    }
+    parsed = { ...parsed, ...applyAssetUrls(parsed, urls) };
+  }
+
   if (parsed.generator) {
     const gen = parsed.generator;
     const base = toCreateProblemRequest(parsed);
