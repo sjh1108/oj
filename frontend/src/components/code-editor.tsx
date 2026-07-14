@@ -19,12 +19,18 @@ export function CodeEditor({
   onChange,
   readOnly = false,
   height = "500px",
+  fontSize = 14,
+  fontFamily = "",
+  wordWrap = false,
 }: {
   language: string;
   value: string;
   onChange?: (v: string) => void;
   readOnly?: boolean;
   height?: string;
+  fontSize?: number;
+  fontFamily?: string; // "" = Monaco default
+  wordWrap?: boolean;
 }) {
   return (
     <div className="border rounded-lg overflow-hidden">
@@ -37,7 +43,9 @@ export function CodeEditor({
         options={{
           readOnly,
           minimap: { enabled: false },
-          fontSize: 14,
+          fontSize,
+          ...(fontFamily ? { fontFamily } : {}),
+          wordWrap: wordWrap ? "on" : "off",
           tabSize: 2,
           scrollBeyondLastLine: false,
           automaticLayout: true,

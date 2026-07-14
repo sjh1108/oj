@@ -1,7 +1,20 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Download, Play, Plus, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  Download,
+  Minus,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Play,
+  Plus,
+  Settings2,
+  Trash2,
+} from "lucide-react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -24,6 +37,11 @@ import {
 import { downloadTextFile, sanitizeFilename } from "@/lib/download";
 import { buildProblemMarkdown } from "@/lib/problem-file";
 import { CodeEditor } from "@/components/code-editor";
+import {
+  EDITOR_FONT_OPTIONS,
+  clampFontSize,
+  useViewSettings,
+} from "@/lib/editor-settings";
 import { Markdown } from "@/components/markdown";
 import { DifficultyBadge } from "@/components/status-badge";
 import type { Language, RunResponse } from "@/types/api";
@@ -87,6 +105,23 @@ export default function ProblemDetailPage() {
 
   const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE);
   const [code, setCode] = useState<string>(STARTER[DEFAULT_LANGUAGE]);
+
+  // 보기 설정(에디터 폰트/크기/줄바꿈, 지문 크기) — localStorage에 유지.
+  const [view, updateView] = useViewSettings();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // 지문 접기(에디터 집중 모드) / 예제·사용자 케이스 섹션 여닫기.
+  const [statementHidden, setStatementHidden] = useState(false);
+  const [samplesOpen, setSamplesOpen] = useState(true);
+  const [customOpen, setCustomOpen] = useState(false);
+  // 데스크톱에서만 좌우 분할(드래그 리사이즈)을 쓴다.
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const apply = () => setIsDesktop(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   // Per-problem, per-language draft persisted in localStorage so in-progress code
   // survives session drops, refreshes, or accidental navigation.
@@ -157,6 +192,7 @@ export default function ProblemDetailPage() {
   };
 
   const addCustomCase = () => {
+    setCustomOpen(true);
     setCustomCases((cs) => [
       ...cs,
       {
@@ -274,9 +310,7 @@ export default function ProblemDetailPage() {
     solutions.error instanceof ApiError &&
     solutions.error.code === "S003";
 
-  return (
-    <main className="max-w-7xl mx-auto p-6 space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  const statementSection = (
         <section className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
@@ -356,7 +390,7 @@ export default function ProblemDetailPage() {
               <CardTitle className="text-base">문제 설명</CardTitle>
             </CardHeader>
             <CardContent>
-              <Markdown>{p.description}</Markdown>
+              <Markdown style={{ fontSize: view.statementFontSize }}>{p.description}</Markdown>
             </CardContent>
           </Card>
 
@@ -366,7 +400,7 @@ export default function ProblemDetailPage() {
                 <CardTitle className="text-base">입력</CardTitle>
               </CardHeader>
               <CardContent>
-                <Markdown>{p.inputDescription}</Markdown>
+                <Markdown style={{ fontSize: view.statementFontSize }}>{p.inputDescription}</Markdown>
               </CardContent>
             </Card>
           )}
@@ -377,14 +411,25 @@ export default function ProblemDetailPage() {
                 <CardTitle className="text-base">출력</CardTitle>
               </CardHeader>
               <CardContent>
-                <Markdown>{p.outputDescription}</Markdown>
+                <Markdown style={{ fontSize: view.statementFontSize }}>{p.outputDescription}</Markdown>
               </CardContent>
             </Card>
           )}
 
           {p.sampleTestCases.length > 0 && (
             <div className="flex items-center justify-between gap-3 pt-2">
-              <h2 className="text-sm font-semibold">예제 테스트케이스</h2>
+              <button
+                type="button"
+                onClick={() => setSamplesOpen((o) => !o)}
+                className="flex items-center gap-1 text-sm font-semibold hover:text-foreground/80"
+              >
+                {samplesOpen ? (
+                  <ChevronDown className="size-4" />
+                ) : (
+                  <ChevronRight className="size-4" />
+                )}
+                예제 테스트케이스 ({p.sampleTestCases.length})
+              </button>
               <Button
                 type="button"
                 variant="outline"
@@ -409,7 +454,8 @@ export default function ProblemDetailPage() {
             </div>
           )}
 
-          {p.sampleTestCases.map((tc, i) => {
+          {samplesOpen &&
+            p.sampleTestCases.map((tc, i) => {
             const result = sampleResults[tc.id];
             const running = sampleRunning[tc.id];
             const normalizedActual = normalizeOutput(result?.stdout);
@@ -542,7 +588,19 @@ export default function ProblemDetailPage() {
           })}
 
           <div className="flex items-center justify-between gap-3 pt-4">
-            <h2 className="text-sm font-semibold">사용자 테스트케이스</h2>
+            <button
+              type="button"
+              onClick={() => setCustomOpen((o) => !o)}
+              className="flex items-center gap-1 text-sm font-semibold hover:text-foreground/80"
+            >
+              {customOpen ? (
+                <ChevronDown className="size-4" />
+              ) : (
+                <ChevronRight className="size-4" />
+              )}
+              사용자 테스트케이스
+              {customCases.length > 0 && ` (${customCases.length})`}
+            </button>
             <Button
               type="button"
               variant="outline"
@@ -553,12 +611,13 @@ export default function ProblemDetailPage() {
               케이스 추가
             </Button>
           </div>
-          {customCases.length === 0 && (
+          {customOpen && customCases.length === 0 && (
             <p className="text-xs text-muted-foreground">
               내가 만든 입력값으로 코드를 돌려볼 수 있습니다. DB에 저장되지 않아요.
             </p>
           )}
-          {customCases.map((c, i) => {
+          {customOpen &&
+            customCases.map((c, i) => {
             const hasExpected = c.expectedOutput.trim().length > 0;
             const passed =
               hasExpected &&
@@ -693,7 +752,9 @@ export default function ProblemDetailPage() {
             );
           })}
         </section>
+  );
 
+  const editorSection = (
         <section className="space-y-3 lg:sticky lg:top-4 lg:self-start">
           <div className="flex items-center justify-between gap-3">
             <select
@@ -707,23 +768,187 @@ export default function ProblemDetailPage() {
                 </option>
               ))}
             </select>
-            <Button
-              onClick={() =>
-                submit.mutate({ problemId: p.id, language, sourceCode: code })
-              }
-              disabled={submit.isPending || !code.trim()}
-            >
-              {submit.isPending ? "제출 중..." : "제출"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setSettingsOpen((o) => !o)}
+                aria-label="보기 설정"
+              >
+                <Settings2 className="size-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="hidden lg:inline-flex"
+                onClick={() => setStatementHidden((h) => !h)}
+                aria-label={statementHidden ? "지문 펼치기" : "지문 접기"}
+              >
+                {statementHidden ? (
+                  <PanelLeftOpen className="size-4" />
+                ) : (
+                  <PanelLeftClose className="size-4" />
+                )}
+              </Button>
+              <Button
+                onClick={() =>
+                  submit.mutate({ problemId: p.id, language, sourceCode: code })
+                }
+                disabled={submit.isPending || !code.trim()}
+              >
+                {submit.isPending ? "제출 중..." : "제출"}
+              </Button>
+            </div>
           </div>
+          {settingsOpen && (
+            <Card>
+              <CardContent className="pt-4 space-y-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span>에디터 글씨 크기</span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        updateView({
+                          editorFontSize: clampFontSize(view.editorFontSize - 1),
+                        })
+                      }
+                      aria-label="에디터 글씨 축소"
+                    >
+                      <Minus className="size-3" />
+                    </Button>
+                    <span className="w-8 text-center tabular-nums">
+                      {view.editorFontSize}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        updateView({
+                          editorFontSize: clampFontSize(view.editorFontSize + 1),
+                        })
+                      }
+                      aria-label="에디터 글씨 확대"
+                    >
+                      <Plus className="size-3" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span>에디터 글꼴</span>
+                  <select
+                    value={view.editorFontFamily}
+                    onChange={(e) =>
+                      updateView({ editorFontFamily: e.target.value })
+                    }
+                    className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    {EDITOR_FONT_OPTIONS.map((f) => (
+                      <option key={f.label} value={f.value}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <label className="flex items-center justify-between gap-3 cursor-pointer">
+                  <span>에디터 줄 바꿈</span>
+                  <input
+                    type="checkbox"
+                    checked={view.wordWrap}
+                    onChange={(e) => updateView({ wordWrap: e.target.checked })}
+                    className="size-4 rounded border-input"
+                  />
+                </label>
+                <div className="flex items-center justify-between gap-3">
+                  <span>지문 글씨 크기</span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        updateView({
+                          statementFontSize: clampFontSize(
+                            view.statementFontSize - 1,
+                          ),
+                        })
+                      }
+                      aria-label="지문 글씨 축소"
+                    >
+                      <Minus className="size-3" />
+                    </Button>
+                    <span className="w-8 text-center tabular-nums">
+                      {view.statementFontSize}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        updateView({
+                          statementFontSize: clampFontSize(
+                            view.statementFontSize + 1,
+                          ),
+                        })
+                      }
+                      aria-label="지문 글씨 확대"
+                    >
+                      <Plus className="size-3" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           <CodeEditor
             language={language}
             value={code}
             onChange={handleCodeChange}
-            height="600px"
+            height={statementHidden && isDesktop ? "72vh" : "600px"}
+            fontSize={view.editorFontSize}
+            fontFamily={view.editorFontFamily}
+            wordWrap={view.wordWrap}
           />
         </section>
-      </div>
+  );
+
+  return (
+    <main className="max-w-7xl mx-auto p-6 space-y-6">
+      {!isDesktop ? (
+        <div className="space-y-6">
+          {statementSection}
+          {editorSection}
+        </div>
+      ) : statementHidden ? (
+        <div className="max-w-5xl mx-auto">{editorSection}</div>
+      ) : (
+        <PanelGroup
+          direction="horizontal"
+          autoSaveId="algoj-problem-split"
+          className="!overflow-visible"
+        >
+          <Panel
+            defaultSize={50}
+            minSize={25}
+            className="!overflow-visible min-w-0 pr-4"
+          >
+            {statementSection}
+          </Panel>
+          <PanelResizeHandle className="w-1 shrink-0 rounded-full bg-border transition-colors hover:bg-primary/60 data-[resize-handle-state=drag]:bg-primary" />
+          <Panel
+            defaultSize={50}
+            minSize={30}
+            className="!overflow-visible min-w-0 pl-4"
+          >
+            {editorSection}
+          </Panel>
+        </PanelGroup>
+      )}
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">다른 사람 풀이</h2>
