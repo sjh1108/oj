@@ -11,6 +11,8 @@ import type {
   TestCaseRequest,
   TestCaseResponse,
   TestCaseUploadStatusResponse,
+  UploadImageRequest,
+  UploadImageResponse,
 } from "@/types/api";
 
 export interface UpdateProblemRequest {
@@ -79,6 +81,10 @@ export const problemsApi = {
     api<void>(`/api/problems/${problemId}/test-cases/${tcId}`, {
       method: "DELETE",
     }),
+  // 지문 이미지 업로드 (S3) — 응답 url을 마크다운 ![alt](url)로 사용.
+  uploadImage: (body: UploadImageRequest) =>
+    api<UploadImageResponse>("/api/images", { method: "POST", body }),
+
   generateTestCase: (problemId: number, body: GenerateTestCaseRequest) =>
     api<GenerateTestCaseResponse>(
       `/api/problems/${problemId}/test-cases/generate`,

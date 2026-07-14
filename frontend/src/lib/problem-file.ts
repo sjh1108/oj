@@ -61,6 +61,16 @@ import type {
 // body-size limit. Not allowed together with @subtasks. Note: generator code
 // is not stored server-side; downloading the problem later serializes the
 // materialized test cases, not this section.
+//
+//   <!-- @assets -->     (optional; images embedded in the file)
+//   ~~~image 그림1.png    # body is the image's base64; referenced from the
+//   iVBORw0KGgo...       # statement as ![설명](asset:그림1.png)
+//   ~~~
+//
+// On upload, referenced assets are pushed to S3 first and every
+// `](asset:이름)` link is rewritten to the public S3 URL before the problem
+// is created. Like @generator, this section is one-way: downloading the
+// problem later keeps the S3 URLs (no reverse conversion to base64).
 
 export interface ParsedTestCase {
   input: string;
@@ -91,6 +101,12 @@ export interface ParsedGeneratorSpec {
   cases: ParsedGeneratorCase[];
 }
 
+export interface ParsedAsset {
+  name: string;
+  contentType: string;
+  base64: string;
+}
+
 export interface ParsedProblem {
   title: string;
   description: string;
@@ -106,6 +122,8 @@ export interface ParsedProblem {
   subtasks?: ParsedSubtask[];
   // Present when the file uses an `<!-- @generator -->` section.
   generator?: ParsedGeneratorSpec;
+  // Present when the file uses an `<!-- @assets -->` section.
+  assets?: ParsedAsset[];
 }
 
 const DIFFICULTIES: Difficulty[] = [
@@ -191,6 +209,18 @@ print(total)
 ~~~case
 43 200000
 ~~~
+
+<!-- @assets -->
+이 섹션도 **선택**입니다. 지문에 이미지를 넣을 때만 쓰고, 필요 없으면 지우세요.
+
+\`~~~image 파일명.png\` 펜스 안에 이미지의 base64를 넣고, 지문에서는
+\`![그림 설명](asset:파일명.png)\` 로 참조합니다. 업로드 시 이미지가 먼저 S3에
+올라가고 참조가 실제 URL로 치환됩니다. (원본 700KB 이하, png/jpg/gif/webp/svg)
+
+base64 만들기: \`base64 -w0 그림.png\` (mac은 \`base64 -i 그림.png\`)
+
+간단한 도형·다이어그램은 base64 대신 지문에 인라인 SVG(\`<svg …>\`)를 직접
+쓰는 것을 권장합니다 — 파일이 가볍고 확대해도 선명합니다.
 `;
 
 function clampNumber(
@@ -323,6 +353,86 @@ function parseGenerator(region: string): ParsedGeneratorSpec {
   };
 }
 
+const ASSET_TYPE_BY_EXT: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+};
+
+// Base64 of ~700KB is ~956k chars — matches the server-side size limit.
+const MAX_ASSET_BASE64_CHARS = 960_000;
+
+// Parse the `<!-- @assets -->` region: one ~~~image <파일명> fence per image,
+// body = the image's base64 (whitespace/newlines allowed and stripped).
+function parseAssets(region: string): ParsedAsset[] {
+  const assets: ParsedAsset[] = [];
+  const seen = new Set<string>();
+
+  for (const fence of parseFences(region)) {
+    const [kind, ...rest] = fence.info.split(/\s+/);
+    if ((kind ?? "").toLowerCase() !== "image") continue;
+    const name = rest.join(" ").trim();
+    if (!name) {
+      throw new Error("~~~image 블록에 파일명을 지정하세요. (예: ~~~image 그림1.png)");
+    }
+    const ext = name.split(".").pop()?.toLowerCase() ?? "";
+    const contentType = ASSET_TYPE_BY_EXT[ext];
+    if (!contentType) {
+      throw new Error(
+        `이미지 '${name}'의 확장자를 지원하지 않습니다. (png, jpg, jpeg, gif, webp, svg)`,
+      );
+    }
+    if (seen.has(name)) {
+      throw new Error(`이미지 '${name}'이(가) 중복 정의되었습니다.`);
+    }
+    const base64 = fence.content.replace(/\s+/g, "");
+    if (!base64) {
+      throw new Error(`이미지 '${name}'의 base64 내용이 비어 있습니다.`);
+    }
+    if (base64.length > MAX_ASSET_BASE64_CHARS) {
+      throw new Error(`이미지 '${name}'이(가) 너무 큽니다. (원본 700KB 이하)`);
+    }
+    seen.add(name);
+    assets.push({ name, contentType, base64 });
+  }
+  return assets;
+}
+
+// Markdown links of the form ](asset:파일명) — the reference syntax used in
+// the statement to point at an @assets image before it has an S3 URL.
+const ASSET_REF_RE = /\]\(asset:([^()\s]+)\)/g;
+
+/** Asset names referenced from the statement sections (dedup'd, in order). */
+export function assetReferenceNames(p: ParsedProblem): string[] {
+  const text = [p.description, p.inputDescription, p.outputDescription].join("\n");
+  const names: string[] = [];
+  let m: RegExpExecArray | null;
+  ASSET_REF_RE.lastIndex = 0;
+  while ((m = ASSET_REF_RE.exec(text)) !== null) {
+    if (!names.includes(m[1])) names.push(m[1]);
+  }
+  return names;
+}
+
+/** Rewrite `](asset:name)` references to their uploaded URLs. */
+export function applyAssetUrls(
+  p: ParsedProblem,
+  urls: Record<string, string>,
+): Pick<ParsedProblem, "description" | "inputDescription" | "outputDescription"> {
+  const sub = (text: string) =>
+    text.replace(ASSET_REF_RE, (whole, name: string) =>
+      urls[name] ? `](${urls[name]})` : whole,
+    );
+  return {
+    description: sub(p.description),
+    inputDescription: sub(p.inputDescription),
+    outputDescription: sub(p.outputDescription),
+  };
+}
+
 // Parse the `<!-- @subtasks -->` region: each subtask starts at a `## ... points=NN`
 // heading, followed by ~~~input/~~~output test-case fences (same as @testcases).
 function parseSubtasks(region: string): ParsedSubtask[] {
@@ -413,7 +523,10 @@ export function parseProblemFile(raw: string): ParsedProblem {
     throw new Error("@generator 섹션은 서브태스크 문제와 함께 사용할 수 없습니다.");
   }
 
-  return {
+  const assets =
+    sections.assets !== undefined ? parseAssets(sections.assets) : undefined;
+
+  const parsed: ParsedProblem = {
     title,
     description,
     inputDescription: sections.input ?? "",
@@ -430,7 +543,20 @@ export function parseProblemFile(raw: string): ParsedProblem {
     testCases: parseTestCases(sections.testcases ?? ""),
     subtasks: subtasks.length > 0 ? subtasks : undefined,
     generator,
+    assets,
   };
+
+  // Every ](asset:이름) reference must have a matching ~~~image fence.
+  const defined = new Set((assets ?? []).map((a) => a.name));
+  for (const name of assetReferenceNames(parsed)) {
+    if (!defined.has(name)) {
+      throw new Error(
+        `지문이 asset:${name} 이미지를 참조하지만 <!-- @assets --> 섹션에 정의가 없습니다.`,
+      );
+    }
+  }
+
+  return parsed;
 }
 
 /** Convert a parsed file straight into the create-problem API payload
