@@ -34,6 +34,15 @@ services:
       - --collation-server=utf8mb4_unicode_ci
       - --innodb-buffer-pool-size=128M
       - --max-connections=50
+      # Memory diet for the tiny (≈2GB) box. performance_schema alone reclaims
+      # ~150-200MB of MySQL 8's idle footprint; the cache/host-cache trims and
+      # skip-name-resolve shave more and avoid DNS stalls on connect. No feature
+      # loss for this workload (we don't query performance_schema).
+      - --performance-schema=OFF
+      - --table-open-cache=256
+      - --table-definition-cache=256
+      - --skip-name-resolve
+      - --host-cache-size=0
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
