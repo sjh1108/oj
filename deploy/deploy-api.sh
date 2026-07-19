@@ -23,9 +23,11 @@ MYSQL_CONTAINER="${MYSQL_CONTAINER:-algoj-mysql}"
 BLUE_PORT=8081
 GREEN_PORT=8082
 # On this small (≈2GB) box a cold JVM boot can crawl when memory is tight and
-# the box is swapping — during the blue-green overlap two JVMs run at once. 90s
-# was too short and failed a deploy mid-boot; 150s gives startup room to finish.
-HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-150}"   # seconds to wait for new container health
+# the box is swapping — during the blue-green overlap two JVMs run at once. In
+# practice 150s still timed out mid-boot (Spring context init alone took ~90s
+# under swap); a manual 360s run succeeded. 300s gives the boot room to finish
+# while still catching a genuinely stuck deploy. Override via HEALTH_TIMEOUT.
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-300}"   # seconds to wait for new container health
 DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-60}"     # graceful stop window for the old container
 MEM_THRESHOLD_MB="${MEM_THRESHOLD_MB:-700}"  # below this available RAM → shrink heap
 
