@@ -22,7 +22,10 @@ UPSTREAM_CONF="${UPSTREAM_CONF:-/etc/nginx/conf.d/algoj-upstream.conf}"
 MYSQL_CONTAINER="${MYSQL_CONTAINER:-algoj-mysql}"
 BLUE_PORT=8081
 GREEN_PORT=8082
-HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-90}"   # seconds to wait for new container health
+# On this small (≈2GB) box a cold JVM boot can crawl when memory is tight and
+# the box is swapping — during the blue-green overlap two JVMs run at once. 90s
+# was too short and failed a deploy mid-boot; 150s gives startup room to finish.
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-150}"   # seconds to wait for new container health
 DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-60}"     # graceful stop window for the old container
 MEM_THRESHOLD_MB="${MEM_THRESHOLD_MB:-700}"  # below this available RAM → shrink heap
 
