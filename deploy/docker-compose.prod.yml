@@ -15,6 +15,9 @@ services:
     image: mysql:8.0
     container_name: algoj-mysql
     restart: unless-stopped
+    # Hard cap so a connection/buffer spike can't push the whole box into swap.
+    # Well above the 128M buffer pool + per-connection buffers (max 50 conns).
+    mem_limit: 512m
     ports:
       # localhost-only bind: host port 3306 reachable only from same box
       - "127.0.0.1:3306:3306"
@@ -42,6 +45,10 @@ services:
     image: rabbitmq:4-alpine
     container_name: algoj-rabbitmq
     restart: unless-stopped
+    # Hard cap. RabbitMQ 4 detects the cgroup limit and sets its memory high
+    # watermark to 0.6 of THIS (≈230MB) instead of 0.6 of host RAM (~1.2GB), so
+    # it back-pressures publishers well before hitting the limit — no OOM kill.
+    mem_limit: 384m
     ports:
       # localhost-only bind, same policy as MySQL
       - "127.0.0.1:5672:5672"
