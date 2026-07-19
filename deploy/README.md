@@ -260,14 +260,58 @@ sudo nginx -t && sudo systemctl reload nginx
 - CD가 `deploy-api.sh`를 SSH로 실행: 새 색 컨테이너 기동 → `/api/health`(DB까지 확인) 통과 대기 →
   `algoj-upstream.conf` 포트 교체 → `nginx -s reload` → 구 컨테이너 graceful drain(최대 60s).
 - **자동 안전 롤백**: 새 컨테이너가 헬스 통과 못 하면 nginx를 건드리지 않고 종료 → 구 컨테이너가 계속 서빙.
-- **메모리**: 겹침 구간에 JVM 2개가 잠깐 뜬다. `free -h`로 여유 확인하고, 빠듯하면 swap을 추가하거나
-  스크립트가 가용 RAM이 임계(기본 700MB) 미만일 때 힙을 자동 축소(`-Xmx320m`)한다. 수동 지정은
-  `JAVA_OPTS=... bash deploy-api.sh`.
-- 무중단 확인:
+- **메모리 / 무겹침 배포**: 이 ≈2GB 박스는 겹침(JVM 2개 동시)을 못 버텨서 CD는 `NO_OVERLAP=1`로 돈다 —
+  구 컨테이너를 먼저 내리고 새 것을 **단독 부팅**한다(안전 롤백 유지: 실패 시 구 컨테이너 재기동). 대신
+  배포 1회당 **~4~6분 다운타임**이 생긴다. 힙은 `-Xms128m -Xmx300m` + SerialGC로 캡한다. 이 다운타임을
+  없애려면 RAM을 늘려 겹침으로 복귀하면 된다 → 아래 **RAM 증설** 참고.
+- 배포 다운타임 관찰(무겹침에선 배포 중 잠깐 502가 정상):
   ```bash
   while true; do curl -s -o /dev/null -w "%{http_code}\n" https://algoj.duckdns.org/api/health; sleep 0.2; done
-  # 배포 중에도 200이 끊기지 않아야 함
   ```
+
+---
+
+## RAM 증설 (Lightsail 2GB → 4GB) — 무중단 배포 복귀
+
+이 박스는 ≈2GB라 겹침(JVM 2개)을 못 버텨 CD가 `NO_OVERLAP=1`(단독 부팅, 배포당 ~4~6분 다운타임)로 돈다.
+**RAM을 4GB로 올리면** 겹침 블루-그린이 다시 들어가 **무중단 배포로 복귀**하고 콜드 부팅도 빨라진다.
+
+> **비용**: AWS 무료 플랜/크레딧 구간에는 4GB도 크레딧이 덮는다(2GB≈$12/월, 4GB≈$24/월 — 무료 구간 종료
+> 후 실제 청구). Lightsail은 **스케일 업만** 되고 스냅샷으로 축소가 안 되니(2GB로 되돌리려면 인스턴스를 새로
+> 생성) 유의.
+
+### 박스에서 할 일 (Lightsail 콘솔, 1회) — 전환 시 짧은 다운타임
+
+Lightsail은 실행 중 인스턴스의 RAM만 늘리는 in-place 리사이즈가 없다. **스냅샷 → 더 큰 플랜으로 새 인스턴스**
+방식으로 한다.
+
+1. **스냅샷 생성**: 콘솔 → 해당 인스턴스 → **Snapshots** → *Create snapshot*. 디스크·데이터 전체가 담긴다
+   (MySQL/RabbitMQ 등은 Docker 볼륨에 있어 그대로 이관). 중요 데이터면 정합성을 위해 스냅샷 직전 잠깐
+   `docker stop algoj-api-blue`(또는 green) 후 촬영 → 완료 뒤 재기동.
+2. **스냅샷에서 새 인스턴스 생성**: 스냅샷 → *Create new instance* → 플랜에서 **4GB(medium)** 선택(같은
+   리전/AZ 권장). CLI 예: `aws lightsail create-instances-from-snapshot --bundle-id <4GB 번들>` — 번들 ID는
+   `aws lightsail get-bundles`로 현재 값 확인.
+3. **고정 IP 이전**: 콘솔 → **Networking** → Static IP를 기존 인스턴스에서 detach → 새 인스턴스에 attach.
+   도메인/DNS는 그대로 유지된다. **이 순간이 다운타임**(수십 초~수 분).
+4. **검증**: 새 인스턴스에 SSH →
+   ```bash
+   free -h                                                       # Mem 총량이 ~4Gi 인지
+   docker ps                                                     # mysql·rabbitmq·api·judge0·bot 전부 Up
+   curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/api/health   # 200
+   ```
+   컨테이너는 스냅샷 디스크에서 그대로 살아난다(스냅샷 시점의 blue/green 색이 뜸).
+5. 이상 없으면 **기존 2GB 인스턴스 삭제** → 이후 4GB만 과금/운영.
+
+### 증설 후 코드 반영 (PR — 4GB 확인 후에만)
+
+4GB로 올라가 겹침이 들어가면 CD를 무중단 겹침 배포로 되돌린다:
+
+- `cd.yml`: 배포 호출에서 **`NO_OVERLAP=1` 제거** → 겹침 블루-그린(무중단) 복귀.
+- (선택) `deploy-api.sh`: `HEALTH_TIMEOUT`을 다시 낮춤(예: 150s) — 4GB에선 부팅이 빠름.
+- 스왑(`/swapfile2`)·MySQL 다이어트·힙 캡·SerialGC는 남겨둬도 무방(여유 안전망).
+
+> **순서 엄수**: 박스가 4GB가 된 걸 확인한 **뒤에** 위 PR을 머지할 것. 2GB 상태에서 `NO_OVERLAP`을 빼면
+> 겹침 배포가 다시 실패한다.
 
 ---
 
