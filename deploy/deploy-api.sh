@@ -22,12 +22,13 @@ UPSTREAM_CONF="${UPSTREAM_CONF:-/etc/nginx/conf.d/algoj-upstream.conf}"
 MYSQL_CONTAINER="${MYSQL_CONTAINER:-algoj-mysql}"
 BLUE_PORT=8081
 GREEN_PORT=8082
-# On this small (≈2GB) box a cold JVM boot can crawl when memory is tight and
-# the box is swapping — during the blue-green overlap two JVMs run at once. In
-# practice 150s still timed out mid-boot (Spring context init alone took ~90s
-# under swap); a manual 360s run succeeded. 300s gives the boot room to finish
-# while still catching a genuinely stuck deploy. Override via HEALTH_TIMEOUT.
-HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-300}"   # seconds to wait for new container health
+# On this small (≈2GB) box a cold JVM boot is genuinely slow — memory-bound
+# class loading pages against swap even with NO_OVERLAP (the app alone still
+# takes ~350-400s to become healthy; Spring context init alone is ~90s). 300s
+# timed out a no-overlap deploy mid-boot and forced a rollback. 480s clears the
+# observed boot time with margin so the deploy completes on the first try
+# (avoiding the double downtime of a rollback). Override via HEALTH_TIMEOUT.
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-480}"   # seconds to wait for new container health
 DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-60}"     # graceful stop window for the old container
 MEM_THRESHOLD_MB="${MEM_THRESHOLD_MB:-700}"  # below this available RAM → shrink heap
 
