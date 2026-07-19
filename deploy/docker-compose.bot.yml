@@ -11,6 +11,8 @@ services:
     image: ${BOT_IMAGE:-ghcr.io/sjh1108/oj-bot}:latest
     container_name: algoj-bot
     restart: unless-stopped
+    # Node bot idles at ~6MB; cap it so a leak can't eat into the tight box.
+    mem_limit: 128m
     env_file: .env
     # The prod compose binds the API to 127.0.0.1:8080 (loopback only, nginx
     # proxies to it), so it is NOT reachable via the docker bridge gateway

@@ -40,13 +40,20 @@ new_name="algoj-api-$new_color"
 old_name="algoj-api-$old_color"
 log "active=${active_port:-none} → deploying $new_color on $new_port ($IMAGE)"
 
-# 2. Memory pre-flight: shrink heap for the overlap if available RAM is tight.
+# 2. Memory pre-flight: the box is small (≈2GB) and blue-green briefly runs two
+#    JVMs at once. Without an explicit -Xmx the JVM grabs ~25% of host RAM
+#    (~500MB) each, so the overlap forces the whole box into swap and the pages
+#    never drain. Always cap the heap; shrink further only when available RAM is
+#    already tight at deploy time. An explicit JAVA_OPTS still overrides both.
 java_opts="${JAVA_OPTS:-}"
 if [ -z "$java_opts" ]; then
+  java_opts="-Xms128m -Xmx300m"
   avail_mb="$(free -m | awk '/^Mem:/ {print $7}')"
   if [ -n "$avail_mb" ] && [ "$avail_mb" -lt "$MEM_THRESHOLD_MB" ]; then
-    java_opts="-Xms128m -Xmx320m"
+    java_opts="-Xms128m -Xmx256m"
     log "low memory (${avail_mb}MB avail < ${MEM_THRESHOLD_MB}MB) → JAVA_OPTS=$java_opts"
+  else
+    log "heap capped for small box → JAVA_OPTS=$java_opts"
   fi
 fi
 

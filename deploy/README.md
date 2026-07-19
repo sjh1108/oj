@@ -134,7 +134,18 @@ curl http://localhost:8080/api/health
 
 - **Spring 시작 실패 (env 누락)**: `journalctl -u algoj-api -f`에서 `Could not resolve placeholder 'DB_PASSWORD'` 같은 메시지 확인. `.env`의 변수 이름/값 점검.
 - **MySQL connection refused**: `docker ps`로 algoj-mysql 상태 + `docker logs algoj-mysql`에서 startup 로그 확인. 포트 충돌 시 `127.0.0.1:3306`이 다른 프로세스에 잡혀있는지 `sudo ss -tlnp | grep 3306`.
-- **OOM / slow**: `free -h`로 swap 사용량 확인. JVM heap 줄이기: systemd unit의 `-Xmx400m`을 `-Xmx256m`으로 (단 너무 줄이면 GC 비용 증가).
+- **OOM / slow (메모리 압박 → 스왑)**: `free -h`로 swap 사용량, `docker stats --no-stream`으로 컨테이너별 RSS 확인. 이 박스(≈2GB)는 여유가 빠듯해 어느 하나만 부풀어도 스왑으로 밀리고, 밀려난 콜드 페이지는 저절로 안 빠져 `free` 수치가 계속 높게 보인다.
+  - **자동(PR로 반영)**: `deploy-api.sh`가 JVM 힙을 상시 `-Xmx300m`(여유 부족 시 256m)으로 캡한다 — `-Xmx` 미지정 시 JVM이 호스트의 25%(~500MB)를 잡아 블루-그린 겹침 때 JVM 2개가 ~1GB를 예약하는 걸 방지. `docker-compose.prod.yml`의 mysql(512m)·rabbitmq(384m), `docker-compose.bot.yml`의 bot(128m)에 `mem_limit`을 걸어 폭주를 봉쇄한다. (배포·재기동 시 자동 적용)
+  - **박스에서 할 일(1회, 스왑 청소)**: 위 캡이 적용된 이미지로 재배포한 뒤에도 과거 잔류 스왑은 남아 있을 수 있다. 여유가 확보되면 비운다.
+    ```bash
+    # 1) 힙 캡 씌워 재배포(무중단) — 구 컨테이너의 500MB 예약분이 회수됨
+    cd /opt/algoj
+    IMAGE=ghcr.io/sjh1108/oj-api:latest bash deploy-api.sh
+    # 2) available > swap used 확인 후에만 콜드 스왑 청소 (아니면 OOM 위험 → 건너뜀)
+    free -h
+    sudo swapoff -a && sudo swapon -a
+    ```
+  - `mem_limit` 변경은 컨테이너 **재생성** 시 반영된다: `docker compose -f docker-compose.prod.yml --env-file .env up -d`.
 
 ## 운영 명령 cheat sheet
 
