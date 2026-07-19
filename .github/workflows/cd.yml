@@ -235,9 +235,13 @@ jobs:
             fi
             # Ensure MySQL + RabbitMQ are up.
             docker compose -f docker-compose.prod.yml --env-file .env up -d
-            # Blue-green swap the API behind nginx (zero-downtime).
+            # Swap the API behind nginx. NO_OVERLAP=1: stop the old container
+            # before booting the new one — this ≈2GB box can't run two JVMs at
+            # once without thrashing swap past the health window. Trades a short
+            # downtime for a deploy that reliably completes (rolls back by
+            # restarting the old container if the new one fails health).
             chmod +x deploy-api.sh
-            IMAGE="${IMAGE}:latest" bash deploy-api.sh
+            NO_OVERLAP=1 IMAGE="${IMAGE}:latest" bash deploy-api.sh
             # Tell the Discord bot to announce the update (best-effort: an
             # absent/disabled bot must never fail the deploy).
             if [ -n "$ANNOUNCE_B64" ]; then
