@@ -88,6 +88,18 @@ run_args=(
 if [ -n "$java_opts" ]; then
   run_args+=(-e "JAVA_OPTS=$java_opts")
 fi
+
+# no-overlap: stop the OLD container before booting the new one. Two JVMs can't
+# coexist on this small box without thrashing swap past any health window, so we
+# trade a short downtime for a boot that actually completes. The old container is
+# stopped (not removed) so a failed boot can roll back by restarting it.
+no_overlap=0
+case "${NO_OVERLAP:-}" in 1|true|yes|on) no_overlap=1 ;; esac
+if [ "$no_overlap" -eq 1 ] && docker ps -a --format '{{.Names}}' | grep -qx "$old_name"; then
+  log "no-overlap: stopping $old_name before boot (brief downtime)"
+  docker stop --time "$DRAIN_TIMEOUT" "$old_name" >/dev/null 2>&1 || true
+fi
+
 docker run "${run_args[@]}" "$IMAGE"
 
 # 5. Wait for the new container to report healthy (DB-aware /api/health).
@@ -103,6 +115,12 @@ if [ "$healthy" -ne 1 ]; then
   log "ERROR: $new_name not healthy — keeping $old_color active (rollback)"
   docker logs --tail 50 "$new_name" 2>&1 || true
   docker rm -f "$new_name" >/dev/null 2>&1 || true
+  # no-overlap stopped the old container to free memory — bring it back so the
+  # site is served again (nginx still points at the old port).
+  if [ "$no_overlap" -eq 1 ] && docker ps -a --format '{{.Names}}' | grep -qx "$old_name"; then
+    log "no-overlap rollback: restarting $old_name"
+    docker start "$old_name" >/dev/null 2>&1 || true
+  fi
   exit 1
 fi
 log "$new_name healthy."
