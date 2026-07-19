@@ -51,12 +51,17 @@ log "active=${active_port:-none} → deploying $new_color on $new_port ($IMAGE)"
 #    (~500MB) each, so the overlap forces the whole box into swap and the pages
 #    never drain. Always cap the heap; shrink further only when available RAM is
 #    already tight at deploy time. An explicit JAVA_OPTS still overrides both.
+# SerialGC + C1-only JIT: on this tiny box G1's region metadata and the C2
+# compiler threads are pure overhead. SerialGC has the smallest native-memory
+# footprint and C1-only cuts startup compilation — both ease the swap pressure
+# that makes a cold boot crawl (and speed startup directly).
+STARTUP_OPTS="-XX:+UseSerialGC -XX:TieredStopAtLevel=1"
 java_opts="${JAVA_OPTS:-}"
 if [ -z "$java_opts" ]; then
-  java_opts="-Xms128m -Xmx300m"
+  java_opts="-Xms128m -Xmx300m $STARTUP_OPTS"
   avail_mb="$(free -m | awk '/^Mem:/ {print $7}')"
   if [ -n "$avail_mb" ] && [ "$avail_mb" -lt "$MEM_THRESHOLD_MB" ]; then
-    java_opts="-Xms128m -Xmx256m"
+    java_opts="-Xms128m -Xmx256m $STARTUP_OPTS"
     log "low memory (${avail_mb}MB avail < ${MEM_THRESHOLD_MB}MB) → JAVA_OPTS=$java_opts"
   else
     log "heap capped for small box → JAVA_OPTS=$java_opts"

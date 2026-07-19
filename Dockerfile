@@ -29,5 +29,7 @@ EXPOSE 8080
 # Heap is overridable so the deploy can shrink it during the brief blue-green
 # overlap on a memory-tight box. `exec` makes java PID 1 so it receives SIGTERM
 # and shuts down gracefully.
-ENV JAVA_OPTS="-Xms200m -Xmx400m"
+# SerialGC + C1-only JIT keep the JVM's native-memory + startup overhead small
+# on a memory-tight box (the prod deploy overrides heap via deploy-api.sh).
+ENV JAVA_OPTS="-Xms200m -Xmx400m -XX:+UseSerialGC -XX:TieredStopAtLevel=1"
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]
