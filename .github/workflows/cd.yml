@@ -235,12 +235,13 @@ jobs:
             fi
             # Ensure MySQL + RabbitMQ are up.
             docker compose -f docker-compose.prod.yml --env-file .env up -d
-            # Blue-green swap the API behind nginx (zero-downtime). DB is on RDS
-            # and Judge0 on a separate box now, so the box has room to run two
-            # JVMs during the brief overlap. (If the box ever gets tight again,
-            # set NO_OVERLAP=1 here to stop the old container before booting.)
+            # Swap the API behind nginx. NO_OVERLAP=1: stop the old container
+            # before booting the new one. Even with MySQL on RDS and Judge0 on a
+            # separate box, this 1.9GB box thrashes swap running two JVMs at once
+            # — an overlap deploy degraded the live site AND timed out mid-boot.
+            # A solo boot is fast now (~1.5-2min), so the brief downtime is small.
             chmod +x deploy-api.sh
-            IMAGE="${IMAGE}:latest" bash deploy-api.sh
+            NO_OVERLAP=1 IMAGE="${IMAGE}:latest" bash deploy-api.sh
             # Tell the Discord bot to announce the update (best-effort: an
             # absent/disabled bot must never fail the deploy).
             if [ -n "$ANNOUNCE_B64" ]; then

@@ -22,11 +22,11 @@ UPSTREAM_CONF="${UPSTREAM_CONF:-/etc/nginx/conf.d/algoj-upstream.conf}"
 MYSQL_CONTAINER="${MYSQL_CONTAINER:-algoj-mysql}"
 BLUE_PORT=8081
 GREEN_PORT=8082
-# Boot is fast again now that MySQL is on RDS and Judge0 is on a separate box —
-# the API no longer competes for the tiny box's RAM, so cold start doesn't thrash
-# swap. 150s is a comfortable margin over a normal boot. (Earlier this was 480s
-# to survive the ~350-400s swap-bound boot back when everything shared 2GB.)
-HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-150}"   # seconds to wait for new container health
+# Deploys run no-overlap (cd.yml sets NO_OVERLAP=1) because this 1.9GB box can't
+# run two JVMs at once even with MySQL/Judge0 offloaded. A solo boot is ~1.5-2min
+# now that the box is light (was ~350-400s when everything shared 2GB); 200s is a
+# safe ceiling that avoids a premature rollback (which would double the downtime).
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-200}"   # seconds to wait for new container health
 DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-60}"     # graceful stop window for the old container
 MEM_THRESHOLD_MB="${MEM_THRESHOLD_MB:-700}"  # below this available RAM → shrink heap
 
