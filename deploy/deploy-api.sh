@@ -87,11 +87,10 @@ run_args=(
   --name "$new_name"
   --restart unless-stopped
   --env-file "$ENV_FILE"
-  # DB_HOST/DB_PORT now come from .env (external DB, e.g. RDS). RabbitMQ still
-  # runs on the box via the compose network, so its host stays fixed.
+  # DB_HOST/DB_PORT and JUDGE0_URL come from .env now (external DB on RDS,
+  # Judge0 on a separate EC2 box). RabbitMQ still runs on the box via the
+  # compose network, so its host stays fixed.
   -e RABBITMQ_HOST=rabbitmq
-  -e JUDGE0_URL=http://host.docker.internal:2358
-  --add-host host.docker.internal:host-gateway
   --network "$NETWORK"
   -p "127.0.0.1:${new_port}:8080"
 )
