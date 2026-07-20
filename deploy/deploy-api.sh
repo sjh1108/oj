@@ -68,14 +68,17 @@ if [ -z "$java_opts" ]; then
   fi
 fi
 
-# 3. Pull the new image and make sure MySQL is healthy before starting.
+# 3. Pull the new image. Wait for the local MySQL container only if it exists —
+#    with an external DB (RDS via DB_HOST in .env) there is no such container.
 docker pull "$IMAGE"
-log "waiting for $MYSQL_CONTAINER healthy..."
-for _ in $(seq 1 30); do
-  status="$(docker inspect -f '{{.State.Health.Status}}' "$MYSQL_CONTAINER" 2>/dev/null || echo missing)"
-  [ "$status" = "healthy" ] && break
-  sleep 2
-done
+if docker inspect "$MYSQL_CONTAINER" >/dev/null 2>&1; then
+  log "waiting for $MYSQL_CONTAINER healthy..."
+  for _ in $(seq 1 30); do
+    status="$(docker inspect -f '{{.State.Health.Status}}' "$MYSQL_CONTAINER" 2>/dev/null || echo missing)"
+    [ "$status" = "healthy" ] && break
+    sleep 2
+  done
+fi
 
 # 4. Start the new container on the inactive port.
 docker rm -f "$new_name" >/dev/null 2>&1 || true
@@ -84,7 +87,8 @@ run_args=(
   --name "$new_name"
   --restart unless-stopped
   --env-file "$ENV_FILE"
-  -e DB_HOST=mysql -e DB_PORT=3306
+  # DB_HOST/DB_PORT now come from .env (external DB, e.g. RDS). RabbitMQ still
+  # runs on the box via the compose network, so its host stays fixed.
   -e RABBITMQ_HOST=rabbitmq
   -e JUDGE0_URL=http://host.docker.internal:2358
   --add-host host.docker.internal:host-gateway

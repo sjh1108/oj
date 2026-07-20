@@ -27,20 +27,35 @@
 ### AWS에서 할 일 (1회)
 
 1. **RDS 인스턴스 생성**: 엔진 **MySQL 8.0**, 클래스 `db.t3.micro`, 스토리지 20GB, **Lightsail과 같은 리전**.
+   - **"초기 데이터베이스 이름"을 `algoj`로 반드시 지정**한다(생성 화면 "추가 구성"에 있음). 비우면 서버만
+     생기고 DB(스키마)가 없어 `Unknown database 'algoj'`로 import·연결이 실패한다(놓쳤으면 이관 전에
+     `CREATE DATABASE`로 만든다 — 아래 2번에 포함).
+   - **DB 인스턴스 식별자**(예: `algoj-db`)는 서버 이름표일 뿐, DB 스키마 `algoj`와는 다른 층위다.
    - 문자셋은 앱과 맞춘다(`utf8mb4` / `utf8mb4_unicode_ci`).
    - **네트워크/보안**: RDS는 **공개(Public) 금지**. Lightsail ↔ RDS(EC2 VPC)를 **VPC 피어링**으로 연결하고,
      RDS 보안그룹의 3306을 **Lightsail 박스에서 오는 트래픽만** 허용한다.
-2. **데이터 이관** (박스에서):
+2. **데이터 이관** (박스에서 — 로컬 mysql 컨테이너의 클라이언트를 재사용):
    ```bash
    cd /opt/algoj
-   # 덤프 (flyway_schema_history 포함해서 통째로 → RDS에서 마이그레이션 재적용 안 함)
-   docker exec algoj-mysql sh -c 'exec mysqldump -ualgoj -p"$MYSQL_PASSWORD" \
-     --single-transaction --routines --triggers algoj' > algoj-dump.sql
-   #   (비번은 .env의 DB_PASSWORD. 컨테이너 env로 안 넘어오면 -p"$(grep ^DB_PASSWORD= .env|cut -d= -f2)")
+   PW="$(grep '^DB_PASSWORD=' .env | cut -d= -f2-)"   # RDS 마스터 암호를 이 값과 동일하게 만든 경우
+   # (필요 시) '초기 데이터베이스 이름'을 안 넣었으면 RDS에 algoj DB 먼저 생성
+   docker exec -e MYSQL_PWD="$PW" algoj-mysql \
+     mysql -h <rds-endpoint> -ualgoj \
+     -e "CREATE DATABASE IF NOT EXISTS algoj CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+   # 덤프 (--no-tablespaces: PROCESS 권한 없는 앱 유저용. flyway_schema_history 포함 → RDS서 재적용 안 함)
+   docker exec algoj-mysql sh -c 'mysqldump -ualgoj -p"$MYSQL_PASSWORD" \
+     --no-tablespaces --single-transaction --routines --triggers algoj' > algoj-dump.sql
+   # 덤프 온전성 확인: 끝에 "-- Dump completed", CREATE TABLE 7개면 정상
+   tail -3 algoj-dump.sql; grep -c "CREATE TABLE" algoj-dump.sql
    # RDS로 적재
-   mysql -h <rds-endpoint> -ualgoj -p algoj < algoj-dump.sql
+   docker exec -i -e MYSQL_PWD="$PW" algoj-mysql \
+     mysql -h <rds-endpoint> -ualgoj algoj < algoj-dump.sql
    ```
-3. **검증**: `mysql -h <rds-endpoint> -ualgoj -p algoj -e "SHOW TABLES; SELECT COUNT(*) FROM submissions;"`
+3. **검증** (로컬과 테이블·행 수가 같은지):
+   ```bash
+   docker exec -e MYSQL_PWD="$PW" algoj-mysql \
+     mysql -h <rds-endpoint> -ualgoj algoj -e "SHOW TABLES; SELECT COUNT(*) FROM submissions;"
+   ```
 
 ### PR로 반영 (데이터 이관·검증 후에만)
 
