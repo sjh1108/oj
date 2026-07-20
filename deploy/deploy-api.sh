@@ -22,13 +22,11 @@ UPSTREAM_CONF="${UPSTREAM_CONF:-/etc/nginx/conf.d/algoj-upstream.conf}"
 MYSQL_CONTAINER="${MYSQL_CONTAINER:-algoj-mysql}"
 BLUE_PORT=8081
 GREEN_PORT=8082
-# On this small (≈2GB) box a cold JVM boot is genuinely slow — memory-bound
-# class loading pages against swap even with NO_OVERLAP (the app alone still
-# takes ~350-400s to become healthy; Spring context init alone is ~90s). 300s
-# timed out a no-overlap deploy mid-boot and forced a rollback. 480s clears the
-# observed boot time with margin so the deploy completes on the first try
-# (avoiding the double downtime of a rollback). Override via HEALTH_TIMEOUT.
-HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-480}"   # seconds to wait for new container health
+# Boot is fast again now that MySQL is on RDS and Judge0 is on a separate box —
+# the API no longer competes for the tiny box's RAM, so cold start doesn't thrash
+# swap. 150s is a comfortable margin over a normal boot. (Earlier this was 480s
+# to survive the ~350-400s swap-bound boot back when everything shared 2GB.)
+HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-150}"   # seconds to wait for new container health
 DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-60}"     # graceful stop window for the old container
 MEM_THRESHOLD_MB="${MEM_THRESHOLD_MB:-700}"  # below this available RAM → shrink heap
 
