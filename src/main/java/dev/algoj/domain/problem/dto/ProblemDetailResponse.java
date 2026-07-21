@@ -24,9 +24,12 @@ public record ProblemDetailResponse(
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
-    public static ProblemDetailResponse from(Problem p) {
-        List<TestCaseResponse> samples = p.getActiveTestCases().stream()
-                .filter(TestCase::getIsSample)
+    /**
+     * @param sampleTestCases only the problem's sample cases — fetched separately
+     *   so a detail view never loads the (potentially multi-MB) hidden test data.
+     */
+    public static ProblemDetailResponse from(Problem p, List<TestCase> sampleTestCases) {
+        List<TestCaseResponse> samples = sampleTestCases.stream()
                 .sorted(Comparator.comparing(TestCase::getOrderIndex))
                 .map(TestCaseResponse::from)
                 .toList();

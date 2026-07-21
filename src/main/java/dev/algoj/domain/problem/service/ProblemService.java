@@ -6,6 +6,7 @@ import dev.algoj.domain.problem.entity.Subtask;
 import dev.algoj.domain.problem.entity.TestCase;
 import dev.algoj.domain.problem.repository.ProblemRepository;
 import dev.algoj.domain.problem.repository.ProblemSpecs;
+import dev.algoj.domain.problem.repository.TestCaseRepository;
 import dev.algoj.domain.submission.repository.SubmissionRepository;
 import dev.algoj.domain.user.entity.User;
 import dev.algoj.domain.user.repository.UserRepository;
@@ -34,6 +35,7 @@ public class ProblemService {
     private final ProblemRepository problemRepository;
     private final UserRepository userRepository;
     private final SubmissionRepository submissionRepository;
+    private final TestCaseRepository testCaseRepository;
 
     @Transactional
     public ProblemDetailResponse create(CreateProblemRequest req, UserPrincipal principal) {
@@ -91,7 +93,11 @@ public class ProblemService {
         }
 
         Problem saved = problemRepository.save(problem);
-        return ProblemDetailResponse.from(saved);
+        // Just-built entity: sample cases are already in memory, no extra query.
+        List<TestCase> samples = saved.getActiveTestCases().stream()
+                .filter(TestCase::getIsSample)
+                .toList();
+        return ProblemDetailResponse.from(saved, samples);
     }
 
     @Transactional(readOnly = true)
@@ -134,7 +140,9 @@ public class ProblemService {
         if (!problem.getIsPublic() && !isAdmin) {
             throw new BusinessException(ErrorCode.PROBLEM_NOT_ACCESSIBLE);
         }
-        return ProblemDetailResponse.from(problem);
+        List<TestCase> samples = testCaseRepository
+                .findByProblemIdAndIsSampleTrueAndIsDraftFalseOrderByOrderIndexAsc(id);
+        return ProblemDetailResponse.from(problem, samples);
     }
 
     @Transactional
@@ -152,7 +160,9 @@ public class ProblemService {
                 normalizeTags(req.tags()),
                 req.isPublic()
         );
-        return ProblemDetailResponse.from(problem);
+        List<TestCase> samples = testCaseRepository
+                .findByProblemIdAndIsSampleTrueAndIsDraftFalseOrderByOrderIndexAsc(id);
+        return ProblemDetailResponse.from(problem, samples);
     }
 
     /** Trim, drop blanks, dedupe (case-insensitively) while keeping input order. */
