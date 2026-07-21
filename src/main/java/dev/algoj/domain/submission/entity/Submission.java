@@ -3,6 +3,7 @@ package dev.algoj.domain.submission.entity;
 import dev.algoj.domain.problem.entity.Problem;
 import dev.algoj.domain.user.entity.User;
 import jakarta.persistence.*;
+import org.hibernate.annotations.BatchSize;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -20,12 +21,17 @@ public class Submission {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // @BatchSize batches user/problem loads across a submission-list page into
+    // one IN query each instead of one SELECT per row (N+1). Matters most for
+    // the 채점 현황 page, which polls every 1-5s.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
+    @BatchSize(size = 50)
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "problem_id", nullable = false)
+    @BatchSize(size = 50)
     private Problem problem;
 
     @Lob

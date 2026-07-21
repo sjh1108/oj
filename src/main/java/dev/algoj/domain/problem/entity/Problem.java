@@ -58,8 +58,11 @@ public class Problem {
     @BatchSize(size = 50)
     private Set<String> tags = new LinkedHashSet<>();
 
+    // @BatchSize batches author loads across a problem-list page into one IN
+    // query instead of one SELECT per row (N+1).
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "author_id", nullable = false)
+    @BatchSize(size = 50)
     private User author;
 
     @OneToMany(mappedBy = "problem", cascade = CascadeType.ALL, orphanRemoval = true)
