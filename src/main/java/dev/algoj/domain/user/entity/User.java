@@ -1,6 +1,7 @@
 package dev.algoj.domain.user.entity;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.BatchSize;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -8,8 +9,11 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
+// Class-level @BatchSize batches lazy User proxy loads (e.g. problem authors,
+// submission users) across a list page into one IN query instead of N SELECTs.
 @Entity
 @Table(name = "users")
+@BatchSize(size = 50)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class User {

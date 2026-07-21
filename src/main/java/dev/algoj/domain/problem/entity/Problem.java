@@ -15,8 +15,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+// Class-level @BatchSize batches lazy Problem proxy loads (e.g. a submission's
+// problem) across a list page into one IN query instead of N SELECTs.
 @Entity
 @Table(name = "problems")
+@BatchSize(size = 50)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Problem {
@@ -58,6 +61,7 @@ public class Problem {
     @BatchSize(size = 50)
     private Set<String> tags = new LinkedHashSet<>();
 
+    // Author proxies are batch-loaded via @BatchSize on the User entity class.
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "author_id", nullable = false)
     private User author;

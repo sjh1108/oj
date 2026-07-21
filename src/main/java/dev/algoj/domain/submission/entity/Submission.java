@@ -20,6 +20,8 @@ public class Submission {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // user/problem proxies are batch-loaded via @BatchSize on the User/Problem
+    // entity classes → avoids N+1 on the submission-list page (polls every 1-5s).
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
