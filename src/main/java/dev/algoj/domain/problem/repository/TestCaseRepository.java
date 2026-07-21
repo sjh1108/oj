@@ -13,6 +13,10 @@ public interface TestCaseRepository extends JpaRepository<TestCase, Long> {
 
     List<TestCase> findByProblemIdOrderByOrderIndexAsc(Long problemId);
 
+    // Problem-detail shows only sample cases. Loading the full collection would
+    // drag every hidden case's LONGTEXT input/output over the wire (slow on RDS).
+    List<TestCase> findByProblemIdAndIsSampleTrueAndIsDraftFalseOrderByOrderIndexAsc(Long problemId);
+
     // Chunked upload appends run as in-place CONCAT updates: loading the entity
     // would drag the full LOBs through the persistence context on every chunk
     // (O(total²) I/O for a multi-MB case).
