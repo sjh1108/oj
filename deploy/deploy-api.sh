@@ -9,15 +9,15 @@
 # Run on the box (CD does this over SSH):
 #   IMAGE=ghcr.io/sjh1108/oj-api:latest bash /opt/algoj/deploy-api.sh
 #
-# Requires: docker, MySQL running via docker-compose.prod.yml, the nginx files
-# from deploy/nginx/ installed in /etc/nginx/conf.d, and passwordless sudo for
+# Requires: docker, an external DB (RDS via DB_HOST in .env), RabbitMQ reachable
+# via RABBITMQ_HOST in .env (runs on the JJ box), the nginx files from
+# deploy/nginx/ installed in /etc/nginx/conf.d, and passwordless sudo for
 # `nginx` + writing the upstream conf (see deploy/README.md).
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/algoj}"
 ENV_FILE="${ENV_FILE:-$APP_DIR/.env}"
 IMAGE="${IMAGE:-ghcr.io/sjh1108/oj-api:latest}"
-NETWORK="${NETWORK:-algoj_default}"
 UPSTREAM_CONF="${UPSTREAM_CONF:-/etc/nginx/conf.d/algoj-upstream.conf}"
 MYSQL_CONTAINER="${MYSQL_CONTAINER:-algoj-mysql}"
 BLUE_PORT=8081
@@ -85,11 +85,11 @@ run_args=(
   --name "$new_name"
   --restart unless-stopped
   --env-file "$ENV_FILE"
-  # DB_HOST/DB_PORT and JUDGE0_URL come from .env now (external DB on RDS,
-  # Judge0 on a separate EC2 box). RabbitMQ still runs on the box via the
-  # compose network, so its host stays fixed.
-  -e RABBITMQ_HOST=rabbitmq
-  --network "$NETWORK"
+  # DB_HOST/DB_PORT, JUDGE0_URL and RABBITMQ_HOST all come from .env now — the
+  # DB is on RDS and both Judge0 and RabbitMQ live on the JJ box. Nothing on the
+  # OJ box shares a docker network with the API anymore (nginx reaches it via the
+  # published loopback port, the Discord bot via host-network loopback), so the
+  # container runs on the default bridge with no per-container host overrides.
   -p "127.0.0.1:${new_port}:8080"
 )
 if [ -n "$java_opts" ]; then

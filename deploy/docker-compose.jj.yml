@@ -1,0 +1,42 @@
+# Judging-infra compose for the JJ (EC2) box — the app's RabbitMQ broker.
+#
+# RabbitMQ moved off the OJ (Lightsail) box to consolidate the judging
+# infrastructure next to Judge0 on JJ, and so that multiple API instances
+# (OJ + EOJ, see deploy/redundancy.md) can share one broker. This is OUR work
+# queue between the API's producer and its @RabbitListener consumers — it is
+# separate from Judge0's own internal redis/postgres.
+#
+# Judge0 itself runs from its own compose (see deploy/judge0/README.md); this
+# file adds only RabbitMQ. Run on the JJ box:
+#   docker compose -f docker-compose.jj.yml --env-file .env up -d
+#   docker logs algoj-rabbitmq --tail 20
+#
+# Networking: bound to 0.0.0.0:5672 so the OJ (and later EOJ) API can reach it
+# over the private network. LOCK THIS DOWN with the JJ security group — inbound
+# 5672 must be allowed ONLY from the API boxes' private IPs, never 0.0.0.0/0.
+
+services:
+  rabbitmq:
+    # Plain (non-management) alpine image: ~100MB RSS.
+    image: rabbitmq:4-alpine
+    container_name: algoj-rabbitmq
+    restart: unless-stopped
+    # Hard cap. RabbitMQ 4 detects the cgroup limit and sets its memory high
+    # watermark to 0.6 of THIS (≈230MB) instead of 0.6 of host RAM, so it
+    # back-pressures publishers well before hitting the limit — no OOM kill.
+    mem_limit: 384m
+    ports:
+      # Reachable from the API boxes over the private network. The JJ security
+      # group — NOT this bind — is what restricts the source to OJ/EOJ.
+      - "5672:5672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      # Durable queue data — queued judge jobs survive a broker restart.
+      - ./rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10

@@ -202,14 +202,14 @@ jobs:
             core.setOutput("announce_b64",
               Buffer.from(JSON.stringify(payload), "utf8").toString("base64"));
 
-      - name: Copy compose + deploy script to server
+      - name: Copy deploy script to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          source: "deploy/docker-compose.prod.yml,deploy/deploy-api.sh"
+          source: "deploy/deploy-api.sh"
           target: /opt/algoj/
           strip_components: 1
 
@@ -233,9 +233,10 @@ jobs:
             if [ -n "$GHCR_PAT" ]; then
               echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             fi
-            # Ensure MySQL + RabbitMQ are up.
-            docker compose -f docker-compose.prod.yml --env-file .env up -d
-            # Swap the API behind nginx. NO_OVERLAP=1: stop the old container
+            # No compose services run on this box anymore: the DB is on RDS and
+            # both Judge0 and RabbitMQ live on the JJ box. deploy-api.sh just
+            # swaps the API container behind nginx.
+            # NO_OVERLAP=1: stop the old container
             # before booting the new one. Even with MySQL on RDS and Judge0 on a
             # separate box, this 1.9GB box thrashes swap running two JVMs at once
             # — an overlap deploy degraded the live site AND timed out mid-boot.
