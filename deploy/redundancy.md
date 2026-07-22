@@ -112,8 +112,8 @@ upstream algoj_api {
 
 - `deploy/deploy-api-single.sh` (신규) — 박스당 no-overlap 배포. 고정 포트 8080,
   `--env-file .env`, `/api/health` 로컬 헬스체크. (현 blue-green 스크립트에서 포트
-  플립/nginx 조작을 제거한 축약판. RabbitMQ 하드코딩 `-e RABBITMQ_HOST=rabbitmq`
-  삭제 — .env의 `RABBITMQ_HOST`=JJ 사용.)
+  플립/nginx 조작을 제거한 축약판. 두 API 박스 모두 `.env`의 `RABBITMQ_HOST`=JJ를
+  사용 — deploy-api.sh의 RabbitMQ 하드코딩·공유 네트워크는 이미 제거됨.)
 - `deploy/nginx/render-upstream.sh` (신규) — 인자 `none|oj-down|eoj-down`을 받아
   upstream conf를 재생성 + `nginx -t` + `nginx -s reload`. EOJ 주소는 env로 주입.
 - `deploy/nginx/algoj-upstream.conf` — 두 서버 등록 형태로 변경(위 §2).

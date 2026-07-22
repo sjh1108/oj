@@ -7,13 +7,16 @@
 분리하기 좋은 순서:
 
 1. **MySQL → AWS RDS** — 상태 저장소라 관리형(백업·패치·장애조치) 이점이 크고, 이미 `DB_HOST`로 접근.
-2. **Judge0 → 별도 EC2** — 임의 코드 실행 샌드박스라 **격리** 이점, 이미 `JUDGE0_URL`로 접근.
+2. **Judge0 → 별도 EC2(JJ)** — 임의 코드 실행 샌드박스라 **격리** 이점, 이미 `JUDGE0_URL`로 접근.
+3. **RabbitMQ → JJ** — 채점 큐를 Judge0 옆으로 모아 **채점 인프라를 한 박스로 통합**하고, API 이중화
+   (OJ+EOJ)가 공통 브로커를 바라볼 수 있게 한다(`deploy/redundancy.md` 선행 조건). 이미 `RABBITMQ_HOST`로 접근.
 
-> **왜 이게 쉬운가**: 두 컴포넌트 모두 API가 **네트워크 주소(설정)로만** 접근한다. 그래서 이전은
+> **왜 이게 쉬운가**: 세 컴포넌트 모두 API가 **네트워크 주소(설정)로만** 접근한다. 그래서 이전은
 > "데이터/서비스를 새 위치에 세우고 → 주소만 바꾸는" 작업이 핵심이고, 애플리케이션 코드는 안 건드린다.
 >
-> ⚠️ 단, `deploy/deploy-api.sh`가 API 컨테이너에 **`DB_HOST=mysql`, `JUDGE0_URL=http://host.docker.internal:2358`을
-> 하드코딩 주입**해 `.env` 값을 덮어쓴다(run_args). 그래서 실제로는 그 하드코딩을 **제거하는 PR**이 함께 필요하다.
+> ⚠️ 단, `deploy/deploy-api.sh`가 과거 API 컨테이너에 **`DB_HOST=mysql`, `JUDGE0_URL=http://host.docker.internal:2358`,
+> `RABBITMQ_HOST=rabbitmq`를 하드코딩 주입**해 `.env` 값을 덮어썼다(run_args). 이전 때마다 그 하드코딩을
+> **제거하는 PR**이 함께 필요했고, 셋 다 제거되어 지금은 전부 `.env`에서 온다.
 
 ---
 
@@ -62,8 +65,9 @@
 - **`deploy/deploy-api.sh`**: run_args에서 **`-e DB_HOST=mysql -e DB_PORT=3306` 줄 제거** → `--env-file .env`의
   `DB_HOST`/`DB_PORT`가 그대로 적용된다. 그리고 **`waiting for $MYSQL_CONTAINER healthy` 대기 블록을 가드**
   한다(로컬 mysql 컨테이너가 없으면 60초 헛대기 → RDS 사용 시 이 단계 건너뛰도록).
-- **`deploy/docker-compose.prod.yml`**: **`mysql` 서비스 삭제**(RDS가 DB를 소유). `rabbitmq`는 유지.
-  `mysql`의 `mem_limit`/볼륨/헬스체크도 함께 제거.
+- **`deploy/docker-compose.prod.yml`**: **`mysql` 서비스 삭제**(RDS가 DB를 소유), `mysql`의
+  `mem_limit`/볼륨/헬스체크도 함께 제거. (이후 RabbitMQ도 JJ로 이전하며 이 파일에 남는 서비스가 없어져
+  파일 자체가 제거되고, RabbitMQ는 `docker-compose.jj.yml`로 옮겨졌다 — 아래 C 참고.)
 - (그대로) Flyway는 부팅 시 **RDS**를 대상으로 마이그레이션한다 — 코드 변경 없음.
 
 ### 박스 `.env` 갱신 (1회)
@@ -114,6 +118,55 @@ JUDGE0_URL=http://<ec2-사설IP>:2358      # 피어링 사용 시 사설 IP
 
 ---
 
+## C. RabbitMQ → JJ (Judge0와 같은 EC2)
+
+### 왜
+- **채점 인프라 통합**: 큐(RabbitMQ)와 채점기(Judge0)를 한 박스(JJ)에 모아 운영 지점을 단순화.
+- **이중화 선행 조건**: API를 OJ+EOJ 두 박스로 이중화하려면(`deploy/redundancy.md`) 두 API가 **공통으로
+  바라볼 브로커**가 필요하다. OJ 도커 네트워크 안의 `rabbitmq`는 EOJ에서 닿을 수 없으므로 JJ로 옮긴다.
+- OJ 박스에서 RabbitMQ(~100MB)가 빠져 메모리도 소폭 확보.
+
+> RabbitMQ는 **우리 API의 작업 큐**(producer=API, consumer=API의 `@RabbitListener`)다. Judge0가
+> 내부적으로 쓰는 redis/postgres와는 별개이므로, JJ에서 Judge0 옆에 **독립 컨테이너**로 띄운다.
+>
+> **안전망**: 이전 중 구 브로커에 쌓여 있던 큐 메시지가 유실돼도, `PendingSubmissionSweeper`가
+> 300초 이상 PENDING인 제출을 자동 재큐잉하므로 채점이 누락되지 않는다. 그래서 `rabbitmq-data`
+> 볼륨을 굳이 옮기지 않아도 되고, 새 브로커를 빈 상태로 시작해도 된다.
+
+### JJ에서 할 일 (1회)
+
+1. **브로커 기동**: `deploy/docker-compose.jj.yml`을 JJ의 `/opt/algoj`(또는 judge0 디렉터리)로 복사하고,
+   `.env`에 `RABBITMQ_USER`/`RABBITMQ_PASSWORD`를 둔 뒤:
+   ```bash
+   docker compose -f docker-compose.jj.yml --env-file .env up -d
+   docker logs algoj-rabbitmq --tail 20      # "Server startup complete" 확인
+   ```
+2. **보안(중요)**: JJ 보안그룹 inbound **5672**를 **OJ(그리고 이후 EOJ)의 사설 IP에서만** 허용.
+   **절대 0.0.0.0/0로 공개 금지**(브로커 자격증명만으로는 부족 — 네트워크로 잠근다).
+3. **검증**(JJ 내부): `docker exec algoj-rabbitmq rabbitmqctl list_queues name messages consumers`.
+
+### PR로 반영 (JJ 브로커 검증 후에만)
+
+- **`deploy/deploy-api.sh`**: run_args에서 **`-e RABBITMQ_HOST=rabbitmq` 제거** → `.env`의 `RABBITMQ_HOST`가
+  적용된다. 더불어 이제 아무도 안 쓰는 **`--network algoj_default` 도 제거**(nginx는 published 포트, 봇은
+  host loopback으로 API에 접근 → 공유 도커 네트워크 불필요).
+- **`deploy/docker-compose.prod.yml` 삭제** + **`deploy/docker-compose.jj.yml` 추가**(RabbitMQ 정의 이전).
+- **`.github/workflows/cd.yml`**: OJ에서 더 이상 compose 서비스를 안 띄우므로 `docker-compose.prod.yml`
+  scp·`docker compose up` 스텝 제거.
+
+### 박스 `.env` 갱신 (1회, OJ)
+```
+RABBITMQ_HOST=<JJ-사설IP>      # 피어링 사용 시 사설 IP
+RABBITMQ_PORT=5672
+# RABBITMQ_USER/RABBITMQ_PASSWORD 는 JJ 브로커에 설정한 값과 동일하게
+```
+
+### 정리 후
+- OJ의 `algoj-rabbitmq` 컨테이너·`rabbitmq-data` 볼륨 제거 → 메모리·디스크 확보.
+  (JJ 브로커로 전환·검증이 끝난 뒤에 내린다.)
+
+---
+
 ## 공통 원칙 · 순서
 
 1. **새 위치에 세우고 → 검증 → `.env` 주소 갱신 → PR(deploy-api.sh/compose) 머지 → 구 컴포넌트 제거**.
@@ -126,6 +179,7 @@ JUDGE0_URL=http://<ec2-사설IP>:2358      # 피어링 사용 시 사설 IP
 
 ## 분리를 권장하지 않는 것
 
-- **RabbitMQ**: 가볍고(150MB) 채점 큐와 밀접. 관리형(Amazon MQ)은 비싸고, SQS로 바꾸면 AMQP→다른 API라
-  코드 변경이 크다 → 굳이 뺄 이유 약함.
-- **nginx / Spring API / Discord 봇**: 앞단 붙박이(nginx는 블루-그린 스위치 겸함)거나 6MB짜리라 분리 이득이 없다.
+- **관리형 RabbitMQ(Amazon MQ) / SQS 전환**: 브로커를 JJ의 자체 컨테이너로 옮기는 건 값싸지만, 관리형
+  Amazon MQ는 비싸고 SQS로 바꾸면 AMQP→다른 API라 코드 변경이 크다 → 굳이 관리형으로 갈 이유는 약함.
+  (자체 호스팅 RabbitMQ를 JJ로 모으는 것과는 별개 — 그건 위 C처럼 권장.)
+- **nginx / Spring API / Discord 봇**: 앞단 붙박이(nginx는 블루-그린 스위치·LB 겸함)거나 6MB짜리라 분리 이득이 없다.
