@@ -105,20 +105,24 @@ upstream algoj_api {
 - 실패 시 롤백: 2)나 5)에서 헬스체크 실패하면 그 단계에서 멈추고(non-zero exit),
   방금 배포한 박스는 여전히 `down`이므로 다른 박스가 계속 서빙. 이전 이미지로
   복구 후 재시도. **한 박스 실패가 서비스 중단으로 이어지지 않는다.**
-- CD가 두 박스에 SSH하려면 EOJ용 접속 시크릿이 추가로 필요(§5). OJ→EOJ SSH 키를
-  두는 대신 CD를 지휘자로 두어 키 관리 지점을 늘리지 않는다.
+- 어느 순간에도 **살아있는 박스 최소 1개**가 100% 서빙 → 무중단.
+- **오케스트레이션 = OJ 지휘자(conductor) 모델.** CD는 **OJ에만 SSH**하고, OJ가
+  nginx 드레이닝(로컬) + EOJ 배포(사설망 SSH)를 순서대로 수행한다. 그래서
+  **EOJ의 :22는 인터넷에 안 열고 OJ 사설 IP만 허용**하면 되고, cd.yml도 단순하다.
+  (대신 OJ에 EOJ 접속 키 `eoj.pem` 1개를 둔다.)
 
-### PR로 자동 반영되는 파일 (구현 단계)
+### PR로 자동 반영되는 파일 (구현됨)
 
-- `deploy/deploy-api-single.sh` (신규) — 박스당 no-overlap 배포. 고정 포트 8080,
-  `--env-file .env`, `/api/health` 로컬 헬스체크. (현 blue-green 스크립트에서 포트
-  플립/nginx 조작을 제거한 축약판. 두 API 박스 모두 `.env`의 `RABBITMQ_HOST`=JJ를
-  사용 — deploy-api.sh의 RabbitMQ 하드코딩·공유 네트워크는 이미 제거됨.)
-- `deploy/nginx/render-upstream.sh` (신규) — 인자 `none|oj-down|eoj-down`을 받아
-  upstream conf를 재생성 + `nginx -t` + `nginx -s reload`. EOJ 주소는 env로 주입.
-- `deploy/nginx/algoj-upstream.conf` — 두 서버 등록 형태로 변경(위 §2).
-- `.github/workflows/cd.yml` — deploy 잡을 위 6단계 롤링으로 교체. `SSH_HOST_EOJ`
-  등 EOJ 시크릿 사용. 공지(디스코드) 스텝은 그대로 마지막에 1회.
+- `deploy/deploy-api-single.sh` — 박스당 no-overlap 배포. `PORT`/`PUBLISH_ADDR`를
+  env로 받아 EOJ(8080/0.0.0.0)·OJ(8081/127.0.0.1)에 대응. nginx는 안 건드리고
+  컨테이너만 교체 + `/api/health` 로컬 헬스체크. 헬스 실패 시 이전 컨테이너로 롤백.
+- `deploy/nginx/render-upstream.sh` — 인자 `none|oj-down|eoj-down`으로 upstream
+  재생성 + `nginx -t` + reload. `OJ_UPSTREAM`/`EOJ_UPSTREAM`은 env로 주입.
+- `deploy/rolling-deploy.sh` (지휘자) — OJ에서 실행. 위 6단계를 순서대로 수행
+  (EOJ는 사설망 SSH로 배포). 어느 단계 실패해도 트랩이 upstream을 `none`으로
+  복원해 두 박스가 계속 서빙.
+- `.github/workflows/cd.yml` — deploy 잡이 세 스크립트를 OJ로 복사하고
+  `rolling-deploy.sh`를 실행. 공지(디스코드) 스텝은 그대로 마지막에 1회.
 
 ---
 
@@ -138,21 +142,22 @@ env 게이트를 두는 걸 권장:
 
 ## 5. 박스에서 할 일 (수동 — PR로 자동화되지 않음)
 
-1. **EOJ EC2 생성** — JJ와 **같은 리전/VPC**의 t3.small(2GB). 같은 VPC라
-   EOJ↔JJ(RabbitMQ/Judge0)↔RDS가 사설망으로 통신.
-2. **Lightsail VPC peering 확인** — OJ가 EOJ 사설 IP에 닿아야 한다(JJ/RDS용으로
-   이미 켜져 있으면 그대로 사용).
-3. **보안 그룹(SG) 규칙**
-   - EOJ SG: inbound **8080** ← OJ 사설 IP (nginx→EOJ API)
-   - JJ SG: inbound **5672**(RabbitMQ), **2358**(Judge0) ← EOJ 사설 IP
-   - RDS SG: inbound **3306** ← EOJ 사설 IP
-4. **EOJ 부트스트랩** — docker 설치, `/opt/algoj/.env` 배치
-   (DB_HOST=RDS, RABBITMQ_HOST=JJ, JUDGE0_URL=JJ, `SWEEPER_ENABLED=false`),
-   GHCR 로그인, `deploy-api-single.sh`로 1회 수동 기동해 헬스 확인.
-5. **OJ nginx** — `render-upstream.sh`로 두 서버 등록된 upstream 반영, `EOJ_PRIV_IP`
-   env 배치.
-6. **CD 시크릿** — GitHub Actions에 `SSH_HOST_EOJ`(+필요시 키/포트) 등록.
-7. **RabbitMQ→JJ 이전 완료 확인** — 이중화의 선행 조건(§ 전제).
+실제 IP: **OJ** `172.26.10.148` · **EOJ** `172.31.32.237`(사설)/`15.164.164.153`(공인) ·
+**JJ** `172.31.43.238`.
+
+이미 완료(대화형 구축):
+- ✅ EOJ EC2(t3.small, JJ와 같은 VPC) 생성 + docker.
+- ✅ SG: EOJ inbound 8080 ← OJ / JJ inbound 5672·2358 ← EOJ / RDS inbound 3306 ← EOJ.
+- ✅ EOJ `/opt/algoj/.env` = OJ와 동일(JWT_SECRET 공유), `deploy-api-single.sh`로 기동·검증.
+- ✅ OJ·EOJ 둘 다 단일 박스 모델(`algoj-api`)로 통일, upstream 2-서버 active-active.
+
+**이 PR 머지 전 남은 준비**(OJ 지휘자 SSH용):
+1. **EOJ SG**: inbound **22** ← **OJ 사설 IP `172.26.10.148/32`** 추가(OJ→EOJ 사설 SSH).
+2. **OJ에 EOJ 키 배치**: `eoj.pem`을 `/opt/algoj/eoj.pem`로 복사, `chmod 600`.
+3. **OJ→EOJ SSH 확인**: `ssh -i /opt/algoj/eoj.pem ubuntu@172.31.32.237 'echo ok'`.
+   (EOJ IP가 바뀌면 `rolling-deploy.sh`의 `EOJ_HOST` 기본값 수정 또는 env 주입.)
+
+> 스케줄러 중복 제거(§4)를 적용하려면 EOJ `.env`에 `SWEEPER_ENABLED=false`도.
 
 ---
 

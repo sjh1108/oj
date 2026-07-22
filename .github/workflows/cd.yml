@@ -202,18 +202,22 @@ jobs:
             core.setOutput("announce_b64",
               Buffer.from(JSON.stringify(payload), "utf8").toString("base64"));
 
-      - name: Copy deploy script to server
+      # Copy the rolling-deploy toolchain to OJ (the LB + conductor box):
+      #   rolling-deploy.sh   — orchestrates both boxes
+      #   deploy-api-single.sh — per-box no-overlap deploy (also pushed to EOJ)
+      #   nginx/render-upstream.sh — drains a box at the nginx layer
+      - name: Copy rolling-deploy scripts to OJ
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          source: "deploy/deploy-api.sh"
+          source: "deploy/rolling-deploy.sh,deploy/deploy-api-single.sh,deploy/nginx/render-upstream.sh"
           target: /opt/algoj/
           strip_components: 1
 
-      - name: Blue-green deploy on server
+      - name: Rolling deploy across OJ + EOJ
         uses: appleboy/ssh-action@v1.2.0
         env:
           IMAGE: ${{ env.IMAGE }}
@@ -229,20 +233,16 @@ jobs:
           script: |
             set -e
             cd /opt/algoj
-            # Authenticate to GHCR (skip if the package is public).
+            # Authenticate to GHCR (skip if the package is public — it is today,
+            # so EOJ pulls the same image without a login too).
             if [ -n "$GHCR_PAT" ]; then
               echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             fi
-            # No compose services run on this box anymore: the DB is on RDS and
-            # both Judge0 and RabbitMQ live on the JJ box. deploy-api.sh just
-            # swaps the API container behind nginx.
-            # NO_OVERLAP=1: stop the old container
-            # before booting the new one. Even with MySQL on RDS and Judge0 on a
-            # separate box, this 1.9GB box thrashes swap running two JVMs at once
-            # — an overlap deploy degraded the live site AND timed out mid-boot.
-            # A solo boot is fast now (~1.5-2min), so the brief downtime is small.
-            chmod +x deploy-api.sh
-            NO_OVERLAP=1 IMAGE="${IMAGE}:latest" bash deploy-api.sh
+            chmod +x rolling-deploy.sh deploy-api-single.sh nginx/render-upstream.sh
+            # OJ conducts a zero-downtime rolling deploy: drain EOJ → deploy EOJ
+            # (over the private network) → restore → drain OJ → deploy OJ →
+            # restore. One box always serves; each box runs a single JVM.
+            IMAGE="${IMAGE}:latest" bash rolling-deploy.sh
             # Tell the Discord bot to announce the update (best-effort: an
             # absent/disabled bot must never fail the deploy).
             if [ -n "$ANNOUNCE_B64" ]; then
