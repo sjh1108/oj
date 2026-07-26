@@ -5,6 +5,7 @@ import dev.algoj.domain.submission.repository.SubmissionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,10 @@ import java.util.List;
  */
 @Slf4j
 @Component
+// Multi-box (OJ+EOJ) safety: run the sweeper on ONE box only. Boxes with
+// SWEEPER_ENABLED=false skip creating this bean, so its @Scheduled never
+// registers there. Default (missing) = enabled, so single-box stays unchanged.
+@ConditionalOnProperty(name = "judge.sweeper-enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class PendingSubmissionSweeper {
 

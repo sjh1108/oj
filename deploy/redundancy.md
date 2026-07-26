@@ -126,17 +126,18 @@ upstream algoj_api {
 
 ---
 
-## 4. 스케줄러 중복 제거 (선택, 권장)
+## 4. 스케줄러 중복 제거 (구현됨)
 
 `PendingSubmissionSweeper`는 두 박스에서 동시에 돌아도 멱등이라 정합성 문제는
-없지만, stale 제출이 2배로 재큐잉되는 낭비가 있다. 한 박스(예: OJ)만 켜도록
-env 게이트를 두는 걸 권장:
+없지만, stale 제출이 2배로 재큐잉되는 낭비가 있다. 한 박스만 돌도록 env 게이트를 뒀다:
 
-- `application.yml`에 `judge.sweeper-enabled: ${SWEEPER_ENABLED:true}` 추가,
-  `PendingSubmissionSweeper`에 `@ConditionalOnProperty` 또는 메서드 초입 가드.
-- OJ의 .env: `SWEEPER_ENABLED=true`, EOJ의 .env: `SWEEPER_ENABLED=false`.
+- `application.yml`에 `judge.sweeper-enabled: ${SWEEPER_ENABLED:true}` 추가.
+- `PendingSubmissionSweeper`에 `@ConditionalOnProperty(name="judge.sweeper-enabled",
+  havingValue="true", matchIfMissing=true)` — false인 박스는 빈 자체가 안 생겨
+  `@Scheduled`가 등록되지 않는다. 미설정(기본)=활성이라 단일 박스는 그대로.
 
-> 이건 이중화의 필수 조건이 아니라 낭비 최적화다. 급하지 않으면 나중에 별도 PR로.
+**박스에서 할 일**: EOJ `/opt/algoj/.env`에 `SWEEPER_ENABLED=false` 추가(OJ는 미설정=활성 유지).
+반영은 다음 배포(롤링) 또는 EOJ 재기동 시.
 
 ---
 
