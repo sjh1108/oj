@@ -9,6 +9,7 @@ import dev.algoj.global.client.dto.Judge0SubmissionResponse;
 public final class Judge0Results {
 
     private static final int MAX_ERROR_LENGTH = 2000;
+    private static final int COMPILE_ERROR_STATUS = 6;
 
     private Judge0Results() {
     }
@@ -29,12 +30,33 @@ public final class Judge0Results {
         };
     }
 
-    /** Prefer compile output, then stderr, then Judge0 message. Truncated for safety. */
+    /** Judge0 status 6 — the compile step itself failed. */
+    public static boolean isCompileError(Judge0SubmissionResponse res) {
+        return res.status() != null && res.status().id() == COMPILE_ERROR_STATUS;
+    }
+
+    /**
+     * Compile output only counts as an error when the compile actually failed:
+     * Judge0 fills compile_output on a *successful* compile too, with warnings and
+     * notes (javac's "uses unchecked or unsafe operations" being the common one).
+     * Showing those as the error message made a plain wrong answer look like a
+     * compile error. Then stderr, then Judge0 message. Truncated for safety.
+     */
     public static String pickErrorMessage(Judge0SubmissionResponse res) {
-        if (res.compileOutput() != null && !res.compileOutput().isBlank()) return truncate(res.compileOutput());
-        if (res.stderr() != null && !res.stderr().isBlank()) return truncate(res.stderr());
-        if (res.message() != null && !res.message().isBlank()) return truncate(res.message());
+        if (isCompileError(res) && notBlank(res.compileOutput())) return truncate(res.compileOutput());
+        if (notBlank(res.stderr())) return truncate(res.stderr());
+        if (notBlank(res.message())) return truncate(res.message());
         return null;
+    }
+
+    /** Compiler warnings/notes from a compile that succeeded — informational, not an error. */
+    public static String pickCompileWarning(Judge0SubmissionResponse res) {
+        if (isCompileError(res) || !notBlank(res.compileOutput())) return null;
+        return truncate(res.compileOutput());
+    }
+
+    private static boolean notBlank(String s) {
+        return s != null && !s.isBlank();
     }
 
     private static String truncate(String s) {
