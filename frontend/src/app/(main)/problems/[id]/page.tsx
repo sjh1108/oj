@@ -569,6 +569,17 @@ export default function ProblemDetailPage() {
                         )}
                       </div>
                     )}
+                    {result.status !== "COMPILE_ERROR" &&
+                      result.compileOutput?.trim() && (
+                        <div>
+                          <div className="text-xs text-muted-foreground">
+                            컴파일 경고 (실행에는 영향 없음)
+                          </div>
+                          <pre className="text-xs bg-muted p-2 rounded whitespace-pre-wrap mt-1 text-muted-foreground">
+                            {result.compileOutput}
+                          </pre>
+                        </div>
+                      )}
                     {result.errorMessage && (
                       <div>
                         <div className="text-xs text-muted-foreground">
@@ -733,6 +744,17 @@ export default function ProblemDetailPage() {
                           )}
                         </div>
                       )}
+                      {c.result.status !== "COMPILE_ERROR" &&
+                        c.result.compileOutput?.trim() && (
+                          <div>
+                            <div className="text-xs text-muted-foreground">
+                              컴파일 경고 (실행에는 영향 없음)
+                            </div>
+                            <pre className="text-xs bg-muted p-2 rounded whitespace-pre-wrap mt-1 text-muted-foreground">
+                              {c.result.compileOutput}
+                            </pre>
+                          </div>
+                        )}
                       {c.result.errorMessage && (
                         <div>
                           <div className="text-xs text-muted-foreground">

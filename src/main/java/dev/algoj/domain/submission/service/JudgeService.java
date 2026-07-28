@@ -8,6 +8,7 @@ import dev.algoj.domain.submission.dto.SubtaskResultDto;
 import dev.algoj.domain.submission.entity.Submission;
 import dev.algoj.domain.submission.repository.SubmissionRepository;
 import dev.algoj.global.client.Judge0Client;
+import dev.algoj.global.client.Judge0Results;
 import dev.algoj.global.client.Judge0StatusMapper;
 import dev.algoj.global.client.dto.Judge0SubmissionRequest;
 import dev.algoj.global.client.dto.Judge0SubmissionResponse;
@@ -128,7 +129,7 @@ public class JudgeService {
                     groupStatus = tcStatus;
                     if (firstFailure == null) {
                         firstFailure = tcStatus;
-                        errorMessage = pickErrorMessage(res);
+                        errorMessage = Judge0Results.pickErrorMessage(res);
                     }
                     break; // this subtask is lost; move on to the next one
                 }
@@ -204,16 +205,5 @@ public class JudgeService {
             log.warn("Failed to serialize subtask results", e);
             return null;
         }
-    }
-
-    private String pickErrorMessage(Judge0SubmissionResponse res) {
-        if (res.compileOutput() != null && !res.compileOutput().isBlank()) return truncate(res.compileOutput());
-        if (res.stderr() != null && !res.stderr().isBlank()) return truncate(res.stderr());
-        if (res.message() != null && !res.message().isBlank()) return truncate(res.message());
-        return null;
-    }
-
-    private String truncate(String s) {
-        return s.length() > 2000 ? s.substring(0, 2000) : s;
     }
 }

@@ -63,8 +63,12 @@ class JudgeServiceSubtaskTest {
     private static final int WA = 4;   // Judge0 "Wrong Answer"
 
     private Judge0SubmissionResponse judge0(int statusId) {
+        return judge0(statusId, null);
+    }
+
+    private Judge0SubmissionResponse judge0(int statusId, String compileOutput) {
         return new Judge0SubmissionResponse(
-                "out", null, null, null, "0.01", 1000, "tok",
+                "out", null, compileOutput, null, "0.01", 1000, "tok",
                 new Judge0SubmissionResponse.Status(statusId, "desc"));
     }
 
@@ -143,6 +147,20 @@ class JudgeServiceSubtaskTest {
 
         assertThat(s.getScore()).isEqualTo(0);
         assertThat(s.getStatus()).isEqualTo(Submission.Status.WRONG_ANSWER);
+    }
+
+    @Test
+    void compilerWarnings_doNotBecomeTheErrorMessage() {
+        Submission s = submissionFor(problemWithTwoSubtasks(), 3);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
+        // Compiled fine (javac only warned), then answered wrong.
+        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class), any()))
+                .thenReturn(judge0(WA, "Note: Main.java uses unchecked or unsafe operations.\n"));
+
+        service.judge(1L);
+
+        assertThat(s.getStatus()).isEqualTo(Submission.Status.WRONG_ANSWER);
+        assertThat(s.getErrorMessage()).isNull();
     }
 
     @Test
