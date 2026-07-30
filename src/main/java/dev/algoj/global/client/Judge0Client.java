@@ -6,8 +6,8 @@ import dev.algoj.global.client.dto.Judge0SubmissionRequest;
 import dev.algoj.global.client.dto.Judge0SubmissionResponse;
 import dev.algoj.global.exception.BusinessException;
 import dev.algoj.global.exception.ErrorCode;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -18,11 +18,20 @@ import java.util.Base64;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class Judge0Client {
 
     private final Judge0ClientProvider judge0Clients;
     private final ObjectMapper objectMapper;
+    /** Judge0's own MAX_MEMORY_LIMIT — anything above it is refused with 422. */
+    private final int maxMemoryLimitKb;
+
+    public Judge0Client(Judge0ClientProvider judge0Clients,
+                        ObjectMapper objectMapper,
+                        @Value("${judge0.max-memory-limit-kb}") int maxMemoryLimitKb) {
+        this.judge0Clients = judge0Clients;
+        this.objectMapper = objectMapper;
+        this.maxMemoryLimitKb = maxMemoryLimitKb;
+    }
 
     public Judge0SubmissionResponse submitAndWait(Judge0SubmissionRequest plain) {
         return submitAndWait(plain, null);
@@ -67,9 +76,24 @@ public class Judge0Client {
                 b64Encode(p.stdin()),
                 b64Encode(p.expectedOutput()),
                 p.cpuTimeLimit(),
-                p.memoryLimit(),
+                clampMemoryLimit(p.memoryLimit()),
                 p.maxFileSize()
         );
+    }
+
+    /**
+     * A problem may declare more memory than the Judge0 box allows (registration
+     * permits up to 1GB, the box caps at MAX_MEMORY_LIMIT). Sending it verbatim
+     * gets the whole submission refused with
+     * {@code 422 {"memory_limit":["must be less than or equal to N"]}} — judging
+     * at the box's ceiling is far better than failing the run outright.
+     */
+    private Integer clampMemoryLimit(Integer requestedKb) {
+        if (requestedKb == null || requestedKb <= maxMemoryLimitKb) return requestedKb;
+        log.warn("memory_limit {}KB exceeds Judge0 max {}KB — clamping (raise MAX_MEMORY_LIMIT "
+                + "on the Judge0 box and judge0.max-memory-limit-kb together to honor it)",
+                requestedKb, maxMemoryLimitKb);
+        return maxMemoryLimitKb;
     }
 
     private Judge0SubmissionResponse decodeResponse(Judge0SubmissionResponse r) {

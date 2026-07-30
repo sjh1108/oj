@@ -52,6 +52,12 @@ judge0:
   # Generous: generation runs two sequential wait=true executions (generator +
   # solution) of up to generate.time-limit-ms CPU each, plus queue wait.
   read-timeout-ms: 30000
+  # Mirror of MAX_MEMORY_LIMIT in the Judge0 box's judge0.conf (stock default
+  # 512000KB). Judge0 refuses any submission asking for more with
+  # 422 {"memory_limit":["must be less than or equal to N"]}, so requests above
+  # this are clamped before they leave the app. Raise both together — the box
+  # first, then this value.
+  max-memory-limit-kb: ${JUDGE0_MAX_MEMORY_LIMIT_KB:512000}
   generate:
     # Generous limits for generator / model-solution runs (kept under read-timeout-ms).
     time-limit-ms: ${JUDGE0_GENERATE_TIME_LIMIT_MS:10000}
