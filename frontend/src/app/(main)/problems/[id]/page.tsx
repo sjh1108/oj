@@ -17,7 +17,7 @@ import {
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { problemsApi } from "@/lib/problems-api";
@@ -123,6 +123,18 @@ export default function ProblemDetailPage() {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
+  // The editor is uncontrolled (see components/code-editor.tsx) — `code` mirrors
+  // it for submit/run, and is never pushed back in while typing. When the page
+  // genuinely needs to replace the editor's content (draft restore, language
+  // switch) we bump this epoch: it is part of the editor's `key`, so the editor
+  // remounts with the new text instead.
+  const [editorEpoch, setEditorEpoch] = useState(0);
+
+  const replaceCode = (next: string) => {
+    setCode(next);
+    setEditorEpoch((e) => e + 1);
+  };
+
   // Per-problem, per-language draft persisted in localStorage so in-progress code
   // survives session drops, refreshes, or accidental navigation.
   const draftKey = (lang: Language) => `algoj-draft:${id}:${lang}`;
@@ -132,28 +144,53 @@ export default function ProblemDetailPage() {
     return window.localStorage.getItem(draftKey(lang));
   };
 
-  const writeDraft = (lang: Language, value: string) => {
+  // Draft writes are debounced — a synchronous localStorage write on every
+  // keystroke made typing sluggish on long files. The pending write carries its
+  // own language so a switch mid-debounce still lands in the right slot.
+  const pendingDraft = useRef<{ lang: Language; value: string } | null>(null);
+  const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushDraft = useCallback(() => {
+    if (draftTimer.current) {
+      clearTimeout(draftTimer.current);
+      draftTimer.current = null;
+    }
+    const pending = pendingDraft.current;
+    pendingDraft.current = null;
+    if (!pending) return;
     if (typeof window === "undefined" || !Number.isFinite(id)) return;
+    const key = `algoj-draft:${id}:${pending.lang}`;
     // Don't persist the pristine starter template — keep "no draft" meaning no draft.
-    if (value === STARTER[lang]) window.localStorage.removeItem(draftKey(lang));
-    else window.localStorage.setItem(draftKey(lang), value);
-  };
+    if (pending.value === STARTER[pending.lang])
+      window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, pending.value);
+  }, [id]);
+
+  // Leaving the page must not drop the last few keystrokes.
+  useEffect(() => flushDraft, [flushDraft]);
 
   // Restore the saved draft for the current language when the problem changes.
   useEffect(() => {
-    setCode(readDraft(language) ?? STARTER[language]);
+    const restored = readDraft(language) ?? STARTER[language];
+    if (restored !== code) replaceCode(restored);
     // Intentionally keyed on `id` only; language switches are handled inline below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  const handleCodeChange = (value: string) => {
-    setCode(value);
-    writeDraft(language, value);
-  };
+  const handleCodeChange = useCallback(
+    (value: string) => {
+      setCode(value);
+      pendingDraft.current = { lang: language, value };
+      if (draftTimer.current) clearTimeout(draftTimer.current);
+      draftTimer.current = setTimeout(flushDraft, 300);
+    },
+    [flushDraft, language],
+  );
 
   const handleLanguageChange = (lang: Language) => {
+    flushDraft(); // persist the outgoing language's draft before swapping
     setLanguage(lang);
-    setCode(readDraft(lang) ?? STARTER[lang]);
+    replaceCode(readDraft(lang) ?? STARTER[lang]);
   };
 
   const copyToClipboard = async (text: string, label: string) => {
@@ -928,6 +965,9 @@ export default function ProblemDetailPage() {
             </Card>
           )}
           <CodeEditor
+            // Remount (= adopt new content) only on a deliberate replacement:
+            // problem change, language switch, draft restore. Never on typing.
+            key={`${id}-${language}-${editorEpoch}`}
             language={language}
             value={code}
             onChange={handleCodeChange}

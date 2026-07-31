@@ -279,6 +279,45 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ---
 
+## nginx 보안 공지 대응 절차
+
+클라우드 사업자/보안 공지로 nginx CVE 권고가 오면 **버전 숫자만 보고 판단하지 않는다.**
+이 박스의 nginx는 우분투 배포판 패키지(`/usr/sbin/nginx`, apt)라 업스트림 버전(1.18.0)이
+그대로 남고 **패치만 백포트**된다 — 공지의 "1.30.4 미만 취약" 표에는 항상 걸리는 것처럼 보인다.
+
+판단은 이 두 가지로 한다.
+
+```bash
+# 1) 우분투 패키지 버전 — 여기가 최신이면 apt로 할 수 있는 건 끝
+dpkg -l | grep nginx
+sudo apt update && sudo apt install --only-upgrade nginx nginx-core nginx-common
+
+# 2) 취약 코드 경로를 실제로 쓰는지 — include까지 펼친 실효 설정에서 확인
+sudo nginx -T 2>/dev/null | grep -nE '^\s*(map|slice)\b'
+```
+
+2번이 핵심이다. nginx CVE는 특정 지시어(`map` + 정규식 캡처, `slice` 등)를 쓸 때만 트리거되는
+경우가 많아서, **해당 지시어가 설정에 없으면 패키지가 미패치여도 실질 노출이 없다.**
+`/etc/nginx/`를 grep하면 기본 문자셋 파일(`koi-utf`, `koi-win`, `win-utf`)의 `charset_map`과
+주석이 잡히는데 이건 `map` 지시어가 아니다 — `nginx -T` 쪽이 정확하다.
+
+우분투 보안 상태는 `https://ubuntu.com/security/CVE-XXXX-XXXXX`에서 릴리스별로 확인한다
+(`Vulnerable` / `Fixed`). 패키지가 최신인데도 `Vulnerable`이면 **아직 패치가 안 나온 것**이므로
+기다린다. 후속 패치를 놓치지 않으려면 `unattended-upgrades`를 켜둔다.
+
+> nginx.org 공식 저장소로 갈아타 최신 업스트림을 직접 올리는 건 권장하지 않는다 —
+> certbot 연동·설정 경로가 바뀌고, 배포 파이프라인이 `/etc/sudoers.d/algoj-deploy`의
+> `/usr/sbin/nginx` 경로에 무인증 sudo를 물고 있어 블루-그린 전환이 깨질 수 있다.
+> apt 업그레이드는 reload만 하고 리스닝 소켓을 유지하므로 무중단 배포에 영향 없다.
+
+### 대응 기록
+
+| 일자 | 공지 | 판단 |
+|---|---|---|
+| 2026-07 | CVE-2026-42533 (`map` + 정규식 캡처 heap overflow), CVE-2026-60005 (`ngx_http_slice_module` 초기화되지 않은 메모리), CVE-2026-56434 (`ngx_http_ssi_module` UAF) | 패키지 `1.18.0-6ubuntu14.18`(jammy 최신) — 60005·56434는 USN-8563-1에서 패치됨. **42533은 ABI 문제로 USN-8563-2에서 롤백**되어 미패치 상태였으나, `nginx -T`에 `map`·`slice` 지시어가 **하나도 없어** 트리거 경로 없음 → 조치 불필요. 후속 USN 나오면 평소대로 `apt upgrade`. |
+
+---
+
 ## RAM 증설 (Lightsail 2GB → 4GB) — 무중단 배포 복귀
 
 이 박스는 ≈2GB라 겹침(JVM 2개)을 못 버텨 CD가 `NO_OVERLAP=1`(단독 부팅, 배포당 ~4~6분 다운타임)로 돈다.
