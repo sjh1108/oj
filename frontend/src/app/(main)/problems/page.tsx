@@ -6,7 +6,6 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { problemsApi } from "@/lib/problems-api";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -168,17 +167,8 @@ export default function ProblemsPage() {
                     (비공개)
                   </span>
                 )}
-                <span className="hidden sm:flex items-center gap-1 shrink-0">
-                  {p.tags.map((t) => (
-                    <Badge
-                      key={t}
-                      variant="outline"
-                      className="text-muted-foreground"
-                    >
-                      {t}
-                    </Badge>
-                  ))}
-                </span>
+                {/* 태그는 풀이 방향을 알려주는 스포일러라 목록에 노출하지 않는다.
+                    찾아볼 사람은 위의 태그 필터를 쓰면 된다. */}
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 {p.authorUsername && (
