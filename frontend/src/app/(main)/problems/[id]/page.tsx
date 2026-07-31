@@ -12,6 +12,7 @@ import {
   Play,
   Plus,
   Settings2,
+  Tag,
   Trash2,
 } from "lucide-react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -109,6 +110,9 @@ export default function ProblemDetailPage() {
   // 보기 설정(에디터 폰트/크기/줄바꿈, 지문 크기) — localStorage에 유지.
   const [view, updateView] = useViewSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // 태그는 풀이 방향을 알려주는 스포일러라 기본은 숨김 — 보고 싶을 때만 펼친다.
+  // 문제를 옮길 때마다 다시 접히도록 페이지 상태로만 둔다(저장하지 않음).
+  const [tagsRevealed, setTagsRevealed] = useState(false);
   // 지문 접기(에디터 집중 모드) / 예제·사용자 케이스 섹션 여닫기.
   const [statementHidden, setStatementHidden] = useState(false);
   const [samplesOpen, setSamplesOpen] = useState(true);
@@ -355,11 +359,29 @@ export default function ProblemDetailPage() {
                 #{p.id} {p.title}
               </h1>
               <DifficultyBadge difficulty={p.difficulty} />
-              {p.tags.map((t) => (
-                <Badge key={t} variant="outline" className="text-muted-foreground">
-                  {t}
-                </Badge>
-              ))}
+              {p.tags.length > 0 &&
+                (tagsRevealed ? (
+                  p.tags.map((t) => (
+                    <Badge
+                      key={t}
+                      variant="outline"
+                      className="text-muted-foreground"
+                    >
+                      {t}
+                    </Badge>
+                  ))
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs text-muted-foreground"
+                    onClick={() => setTagsRevealed(true)}
+                  >
+                    <Tag className="size-3 mr-1" />
+                    태그 보기
+                  </Button>
+                ))}
             </div>
             <div className="flex gap-3 items-center">
               <Button
