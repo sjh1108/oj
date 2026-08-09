@@ -80,9 +80,6 @@ curl -s http://127.0.0.1:2358/config_info | python3 -m json.tool | grep max_memo
 #   반드시 새 값이 찍히는 것까지 확인하고 다음으로 넘어간다
 ```
 
-> `judge0.conf`는 `KEY=VALUE` 형식이고 `#`으로 시작하는 줄은 주석이다. 값을 넣을 때
-> **주석 기호를 지웠는지** 확인한다 — `grep -n 'MAX_MEMORY_LIMIT' judge0.conf`.
-
 > ⚠️ **`--force-recreate`가 없으면 반영되지 않는다.** compose는 `judge0.conf` 같은
 > `env_file`의 **내용 변경을 감지하지 못해** 기존 컨테이너를 그대로 둔다. 값을 고치고
 > `up -d`만 치면 아무 일도 안 일어나고 `config_info`는 예전 값을 계속 보여준다 —
