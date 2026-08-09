@@ -48,7 +48,7 @@ services:
 ```
 
 ```bash
-cd <judge0 설치 폴더>
+cd ~/judge0/judge0-v1.13.1        # JJ 박스의 Judge0 compose 폴더
 docker compose up -d          # server/workers 재생성
 docker compose exec workers /usr/local/pypy3/bin/pypy3 --version   # 동작 확인
 ```
