@@ -1,150 +1,73 @@
-# Deployment — Lightsail (Ubuntu 22.04)
+# Deployment — OJ + EOJ 이중화
 
-같은 박스에 이미 Judge0가 떠 있다는 전제. 이 가이드는 백엔드(Spring Boot) + MySQL을 추가로 올린다.
+API는 **두 박스(OJ·EOJ)에서 동시에** 돌고, DB·브로커·샌드박스는 밖으로 빼놨다.
+설계 배경은 [`redundancy.md`](redundancy.md), 컴포넌트 분리 경위는
+[`offload-components.md`](offload-components.md) 참고.
 
-> **두 가지 배포 방식이 있다.**
-> - **(A) 자동 — GitHub Actions CI/CD** (권장): `master`에 머지되면 이미지를 GHCR에 push 하고
->   서버가 pull 해서 컨테이너로 재기동한다. → 아래 [CI/CD 파이프라인](#cicd-파이프라인-github-actions) 참고.
-> - **(B) 수동 — systemd + jar**: 로컬에서 `bootJar` 빌드 후 `scp`로 jar를 올리고 systemd로 실행.
->   → 이 문서의 1~7단계.
->
-> A 방식은 백엔드를 **컨테이너**로 돌리므로 `algoj-api.service`(systemd) 대신
-> `deploy-api.sh`(블루-그린 컨테이너)를 쓴다. 같은 박스에서 둘을 **동시에 켜지 말 것**
-> (8080 포트 충돌).
+| 박스 | 역할 | 컨테이너 |
+|---|---|---|
+| **OJ** (Lightsail, Ubuntu 22.04) | nginx(TLS 종단 + LB) · API #1 · Discord 봇 · **롤링 배포 지휘자** | `algoj-api`(127.0.0.1:8081), `algoj-bot` |
+| **EOJ** (EC2, 사설망) | API #2 | `algoj-api`(0.0.0.0:8080) |
+| **JJ** (EC2, 사설망) | Judge0 :2358 · RabbitMQ :5672 | `algoj-rabbitmq` 외 Judge0 스택 |
+| **RDS** | MySQL 8 (스키마는 Flyway가 관리) | — |
+| **S3** | 지문 이미지 ([`aws-s3-images.md`](aws-s3-images.md)) | — |
 
-## 박스 레이아웃 (목표)
+프론트엔드는 Vercel에 따로 배포된다(이 문서 범위 밖).
+
+> nginx는 OJ에만 있고 **배포 중에도 내려가지 않는다** — 교체되는 건 API 컨테이너뿐이다.
+> API는 compose 서비스가 아니라 `deploy-api-single.sh`가 직접 관리한다. 박스에 남은 compose는
+> OJ의 봇(`docker-compose.bot.yml`)과 JJ의 브로커(`docker-compose.jj.yml`)뿐이다.
+> (`deploy/docker-compose.yml`은 **로컬 개발용 MySQL**이라 운영 박스와 무관하다.)
+
+## 박스 레이아웃
 
 ```
-/opt/algoj/
-├── .env                 # 비밀 (chmod 600)
-├── algoj.jar            # bootJar 산출물
-├── docker-compose.yml   # MySQL 컨테이너
-└── mysql-data/          # MySQL 영속 볼륨
+/opt/algoj/                     # OJ · EOJ 공통
+├── .env                        # 비밀 (chmod 600) — 두 박스가 같은 값, JWT_SECRET 공유 필수
+├── deploy-api-single.sh        # 박스 1개 무겹침 배포 (CD가 매 배포마다 갱신)
+├── nginx/render-upstream.sh    # OJ 전용 — upstream 드레인/복원
+├── rolling-deploy.sh           # OJ 전용 — 두 박스 교차 롤링 지휘
+├── eoj.pem                     # OJ 전용 — EOJ 사설 SSH 키 (chmod 600)
+└── docker-compose.bot.yml      # OJ 전용 — Discord 봇
 ```
 
-systemd unit은 `/etc/systemd/system/algoj-api.service`에 배치.
-
-## 1단계 — 박스 준비
-
-SSH로 박스 접속 후:
+## 박스 1회 준비 (새 API 박스를 추가할 때)
 
 ```bash
-# 디렉토리 + 권한
-sudo mkdir -p /opt/algoj
-sudo chown ubuntu:ubuntu /opt/algoj
+sudo mkdir -p /opt/algoj && sudo chown ubuntu:ubuntu /opt/algoj
 cd /opt/algoj
 
-# Java 21 (JRE만)
-sudo apt update
-sudo apt install -y openjdk-21-jre-headless
-java -version
-```
-
-## 2단계 — 파일 업로드 (로컬에서 실행)
-
-```bash
-# 프로젝트 루트에서
-./gradlew clean bootJar
-# → build/libs/algoj.jar 생성됨
-
-# Lightsail로 배포 자료 + jar 전송
-scp build/libs/algoj.jar ubuntu@<박스IP>:/opt/algoj/algoj.jar
-scp deploy/docker-compose.yml ubuntu@<박스IP>:/opt/algoj/docker-compose.yml
-scp deploy/.env.prod.example ubuntu@<박스IP>:/opt/algoj/.env
-scp deploy/algoj-api.service ubuntu@<박스IP>:/tmp/algoj-api.service
-```
-
-## 3단계 — 박스에서 .env 작성
-
-```bash
-cd /opt/algoj
-
-# 강력한 secret 생성 후 .env 편집
-openssl rand -base64 24    # → DB_PASSWORD에 붙임
-openssl rand -base64 24    # → MYSQL_ROOT_PASSWORD에 붙임
-openssl rand -base64 48    # → JWT_SECRET에 붙임
-
-vim .env    # __GENERATE__ 자리에 위 값들 + Vercel 도메인 채우기
+# docker 설치 후, .env 를 기존 박스에서 그대로 복사 (JWT_SECRET 이 같아야 토큰이 호환된다)
+scp <기존박스>:/opt/algoj/.env .           # 또는 deploy/.env.prod.example 을 채워서 사용
 chmod 600 .env
+
+# 첫 기동 — 배포 스크립트는 CD가 복사해주지만, 최초 1회는 수동으로 올려서 검증한다
+IMAGE=ghcr.io/sjh1108/oj-api:latest PORT=8080 PUBLISH_ADDR=0.0.0.0 bash deploy-api-single.sh
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/api/health   # 200
 ```
 
-## 4단계 — MySQL 컨테이너 기동
-
-```bash
-cd /opt/algoj
-docker compose --env-file .env up -d
-docker logs algoj-mysql --tail 50
-
-# 헬스체크 통과까지 30초 정도 대기 후
-docker exec algoj-mysql mysqladmin ping -uroot -p"$(grep MYSQL_ROOT_PASSWORD .env | cut -d= -f2)"
-# → mysqld is alive
-```
-
-## 5단계 — Spring Boot systemd 등록
-
-```bash
-sudo mv /tmp/algoj-api.service /etc/systemd/system/algoj-api.service
-sudo systemctl daemon-reload
-sudo systemctl enable algoj-api
-sudo systemctl start algoj-api
-
-# 로그 보기
-journalctl -u algoj-api -f
-```
-
-스타트 시 첫 부팅에선 Hibernate `ddl-auto=validate`라 테이블이 없으면 실패한다 → 첫 1회만 `.env`에서 `JPA_DDL_AUTO=update`로 띄워 테이블 생성 후, 이후 `validate`로 복구. 또는 prod profile yml의 ddl-auto를 `update`로 잠시 바꾼다.
-
-대안: 첫 deploy 직전에 `.env`에 다음 한 줄 추가:
-
-```
-JPA_DDL_AUTO=update
-```
-
-이 값은 application.yml의 `${JPA_DDL_AUTO:...}`를 override한다. (현재 yml에 그 변수 없으면 prod profile의 `validate`가 우선이라 추가 작업 필요 — 아래 6단계 참고.)
-
-### 6단계 (선택) — 첫 deploy 시 스키마 자동 생성
-
-prod profile에서 `ddl-auto: validate`로 묶여있어서 빈 DB에선 startup 실패한다. 첫 deploy에는:
-
-```bash
-# 옵션 A: 임시로 prod yml override
-sudo systemctl stop algoj-api
-# .env에 추가
-echo "SPRING_JPA_HIBERNATE_DDL_AUTO=update" | sudo tee -a /opt/algoj/.env
-sudo systemctl start algoj-api
-journalctl -u algoj-api -f
-# 테이블 생성된 거 확인 후
-docker exec -it algoj-mysql mysql -ualgoj -p"$(grep '^DB_PASSWORD=' /opt/algoj/.env | cut -d= -f2)" algoj -e "SHOW TABLES;"
-# 다시 .env에서 SPRING_JPA_HIBERNATE_DDL_AUTO 줄 제거 → systemctl restart
-```
-
-> Spring 환경변수 매핑: `SPRING_JPA_HIBERNATE_DDL_AUTO` → `spring.jpa.hibernate.ddl-auto`로 해석됨 (`SPRING_*`는 자동 매핑).
-
-## 7단계 — 헬스체크
-
-```bash
-# 박스 내부에서
-curl http://localhost:8080/api/health
-# → {"status":"UP",...}
-```
-
-여기까지 **백엔드가 박스 내부에서 동작**. 외부 노출은 nginx + Let's Encrypt (다음 가이드 L6).
+- 자바·jar를 박스에 깔 필요 없다 — API는 GHCR 이미지로만 돈다.
+- 스키마는 **Flyway**가 부팅 시 적용한다. `SPRING_JPA_HIBERNATE_DDL_AUTO=update`를 넣던
+  옛 절차는 더 쓰지 않는다 (아래 [DB 마이그레이션](#db-마이그레이션-flyway) 참고).
+- 보안그룹: EOJ의 `:8080`은 **OJ 사설 IP만**, `:22`도 OJ 사설 IP만 열어둔다.
 
 ## 트러블슈팅
 
-- **Spring 시작 실패 (env 누락)**: `journalctl -u algoj-api -f`에서 `Could not resolve placeholder 'DB_PASSWORD'` 같은 메시지 확인. `.env`의 변수 이름/값 점검.
-- **MySQL connection refused**: `docker ps`로 algoj-mysql 상태 + `docker logs algoj-mysql`에서 startup 로그 확인. 포트 충돌 시 `127.0.0.1:3306`이 다른 프로세스에 잡혀있는지 `sudo ss -tlnp | grep 3306`.
-- **OOM / slow (메모리 압박 → 스왑)**: `free -h`로 swap 사용량, `docker stats --no-stream`으로 컨테이너별 RSS 확인. 이 박스(≈2GB)는 여유가 빠듯해 어느 하나만 부풀어도 스왑으로 밀리고, 밀려난 콜드 페이지는 저절로 안 빠져 `free` 수치가 계속 높게 보인다.
-  - **자동(PR로 반영)**: `deploy-api.sh`가 JVM 힙을 상시 `-Xmx300m`(여유 부족 시 256m)으로 캡한다 — `-Xmx` 미지정 시 JVM이 호스트의 25%(~500MB)를 잡아 블루-그린 겹침 때 JVM 2개가 ~1GB를 예약하는 걸 방지. 봇은 `docker-compose.bot.yml`의 bot(128m)에 `mem_limit`을 걸어 폭주를 봉쇄한다. (MySQL은 RDS로, RabbitMQ는 JJ 박스의 `docker-compose.jj.yml`(384m)로 이전돼 이 박스에서는 관리하지 않는다.) (배포·재기동 시 자동 적용)
-  - **박스에서 할 일(1회, 스왑 청소)**: 위 캡이 적용된 이미지로 재배포한 뒤에도 과거 잔류 스왑은 남아 있을 수 있다. 여유가 확보되면 비운다.
-    ```bash
-    # 1) 힙 캡 씌워 재배포(무중단) — 구 컨테이너의 500MB 예약분이 회수됨
-    cd /opt/algoj
-    IMAGE=ghcr.io/sjh1108/oj-api:latest bash deploy-api.sh
-    # 2) available > swap used 확인 후에만 콜드 스왑 청소 (아니면 OOM 위험 → 건너뜀)
-    free -h
-    sudo swapoff -a && sudo swapon -a
-    ```
+- **Spring 시작 실패 (env 누락)**: `docker logs algoj-api --tail 100`에서
+  `Could not resolve placeholder 'DB_PASSWORD'` 같은 메시지 확인. `.env`의 변수 이름/값 점검.
+- **DB 연결 실패**: RDS 보안그룹 inbound 3306에 해당 박스 사설 IP가 있는지 먼저 본다.
+  `docker exec algoj-api env | grep DB_HOST`로 컨테이너가 실제로 받은 값도 확인.
+- **채점이 PENDING에서 안 넘어감**: JJ 브로커 연결 문제일 가능성이 높다.
+  JJ에서 `docker exec algoj-rabbitmq rabbitmqctl list_queues name messages consumers` —
+  `judge.queue`의 consumers가 0이면 어느 API도 안 붙은 것이다.
+- **OOM / slow (메모리 압박 → 스왑)**: `free -h`로 swap 사용량, `docker stats --no-stream`으로
+  컨테이너별 RSS 확인. 두 박스 다 ≈2GB라 여유가 빠듯하고, 한 번 밀려난 콜드 페이지는 저절로
+  안 빠져 `free` 수치가 계속 높게 보인다.
+  - **자동(코드에 반영됨)**: `deploy-api-single.sh`가 JVM 힙을 `-Xms128m -Xmx300m`(여유 부족 시
+    256m) + SerialGC로 캡한다 — `-Xmx` 미지정 시 JVM이 호스트의 25%(~500MB)를 잡는 걸 막는다.
+    봇은 `docker-compose.bot.yml`에서 128m, JJ 브로커는 `docker-compose.jj.yml`에서 384m로 묶여 있다.
+  - **잔류 스왑 청소**(필요할 때만): `free -h`에서 **available > swap used**를 확인한 뒤에만
+    `sudo swapoff -a && sudo swapon -a` (아니면 OOM 위험).
   - `mem_limit` 변경은 컨테이너 **재생성** 시 반영된다: 봇은 OJ에서
     `docker compose -f docker-compose.bot.yml --env-file .env up -d`, RabbitMQ는 JJ에서
     `docker compose -f docker-compose.jj.yml --env-file .env up -d`.
@@ -152,22 +75,18 @@ curl http://localhost:8080/api/health
 ## 운영 명령 cheat sheet
 
 ```bash
-sudo systemctl status algoj-api      # 상태
-sudo systemctl restart algoj-api     # 재시작
-journalctl -u algoj-api -f           # 라이브 로그
-docker compose --env-file .env logs -f mysql
-docker compose --env-file .env restart mysql
-```
+# 두 박스 공통
+docker ps                                   # algoj-api 상태 (OJ는 algoj-bot 도)
+docker logs algoj-api -f                    # 라이브 로그
+docker restart algoj-api                    # 재시작 (배포 없이)
+curl -s http://127.0.0.1:8081/api/health    # OJ (EOJ는 8080)
 
-새 jar 배포:
+# OJ 전용 — 수동 롤링 배포 (CD가 하는 것과 동일)
+cd /opt/algoj && IMAGE=ghcr.io/sjh1108/oj-api:latest bash rolling-deploy.sh
 
-```bash
-# 로컬
-./gradlew clean bootJar
-scp build/libs/algoj.jar ubuntu@<박스IP>:/opt/algoj/algoj.jar
-
-# 박스
-sudo systemctl restart algoj-api
+# OJ 전용 — 한 박스만 임시로 빼기/되돌리기
+bash nginx/render-upstream.sh eoj-down      # EOJ 격리 (OJ가 100% 서빙)
+bash nginx/render-upstream.sh none          # 둘 다 활성으로 복원
 ```
 
 ---
@@ -185,63 +104,66 @@ sudo systemctl restart algoj-api
 1. **test**: 백엔드 테스트 재실행.
 2. **build-and-push**: 이미지 빌드 후 `ghcr.io/<owner>/oj-api:latest` + `:sha-<커밋>`로 push.
    GHCR 인증은 Actions 기본 `GITHUB_TOKEN`을 사용.
-3. **deploy** (`DEPLOY_ENABLED=true`일 때만): `deploy-api.sh`를 박스로 복사한 뒤 SSH로 접속해
-   블루-그린(무겹침) 배포를 실행. 박스에는 더 이상 compose 서비스가 없다 — DB는 RDS,
-   Judge0·RabbitMQ는 JJ 박스에 있다.
+3. **deploy** (`DEPLOY_ENABLED=true`일 때만): `rolling-deploy.sh` · `deploy-api-single.sh` ·
+   `nginx/render-upstream.sh`를 **OJ로 복사**한 뒤 SSH로 `rolling-deploy.sh`를 실행한다.
+   OJ가 지휘자가 되어 두 박스를 **교차 롤링**으로 교체한다(아래 참고). EOJ로는 CD가 직접
+   접속하지 않는다 — OJ가 사설망 SSH로 대신 배포하므로 EOJ의 `:22`는 OJ에만 열면 된다.
+4. **공지**: 배포 성공 시 PR 본문의 `## 공지` 섹션만 디스코드 공지 채널에 게시한다.
 
 ### 필요한 GitHub Secrets / Variables
 
-저장소 **Settings → Secrets and variables → Actions**에서 설정.
+저장소 **Settings → Secrets and variables → Actions**에서 설정. **OJ 접속 정보만** 있으면 된다.
 
 | 종류 | 이름 | 설명 |
 |------|------|------|
 | Variable | `DEPLOY_ENABLED` | `true`여야 deploy 잡이 동작. 미설정 시 build+push까지만. |
-| Secret | `SSH_HOST` | 배포 박스 IP/호스트 |
+| Secret | `SSH_HOST` | **OJ** IP/호스트 (지휘자 겸 LB) |
 | Secret | `SSH_USER` | SSH 사용자 (예: `ubuntu`) |
-| Secret | `SSH_KEY` | SSH 개인키 (PEM 전체) |
+| Secret | `SSH_KEY` | **OJ** SSH 개인키 (PEM 전체) |
 | Secret | `SSH_PORT` | (선택) 기본 22 |
 | Secret | `GHCR_PAT` | (선택) 박스에서 GHCR pull용 read:packages 토큰. 패키지를 public으로 두면 불필요. |
 
+> **EOJ 키는 Secret이 아니다.** OJ의 `/opt/algoj/eoj.pem`(chmod 600)에 두면
+> `rolling-deploy.sh`가 그걸로 EOJ에 접속한다. EOJ IP가 바뀌면 스크립트의 `EOJ_HOST`
+> 기본값(`172.31.32.237`)을 고치거나 env로 주입한다.
+>
 > GHCR 패키지는 기본 **private**이다. 박스가 이미지를 받으려면 `GHCR_PAT`로 로그인하거나,
 > GHCR 패키지 페이지에서 visibility를 **public**으로 바꾼다.
 
-### 박스 1회 준비 (컨테이너 배포용)
-
-```bash
-cd /opt/algoj
-# .env 는 기존 그대로 사용 (B 방식과 공유). DB_HOST/JUDGE0_URL/RABBITMQ_HOST 는 .env 값이 그대로 쓰인다
-# (deploy-api.sh 의 하드코딩 주입은 모두 제거됨 — DB는 RDS, Judge0·RabbitMQ는 JJ).
-# deploy-api.sh 는 CD가 매 배포마다 자동 복사하므로 수동 준비 불필요.
-
-# 기존 systemd jar 방식과 충돌 방지 — 컨테이너로 전환한다면 systemd unit 중지
-sudo systemctl disable --now algoj-api || true
-
-# 첫 배포 시 스키마 생성 (prod 는 ddl-auto=validate 라 빈 DB면 실패)
-echo "SPRING_JPA_HIBERNATE_DDL_AUTO=update" >> /opt/algoj/.env   # 1회만, 이후 제거
-```
-
-이후 `master`에 머지하면 자동 배포된다. 수동 트리거는 Actions 탭의 **CD → Run workflow**.
+`master`에 머지하면 자동 배포된다. 수동 트리거는 Actions 탭의 **CD → Run workflow**.
 
 ---
 
-## 무중단 배포 (블루-그린)
+## 무중단 배포 (OJ + EOJ 교차 롤링)
 
-API를 새 이미지로 교체할 때 다운타임이 없도록, 배포는 **구/신 컨테이너를 잠깐 동시에**
-띄우고 헬스 통과 후 nginx를 전환한다(`deploy/deploy-api.sh`). API는 compose 서비스가 아니라
-`deploy-api.sh`가 직접 관리하며(박스에는 이제 compose 서비스가 없다 — DB는 RDS, Judge0·RabbitMQ는 JJ),
-`algoj-api-blue`/`algoj-api-green`가 포트 `8081`/`8082`를 번갈아 쓴다. nginx는 `upstream algoj_api`로
-활성 색에 프록시한다.
+**박스당 JVM 1개**가 원칙이다. 한 박스에서 블루-그린으로 JVM 2개를 겹치면 ≈2GB 박스가 스왑을
+갈아 오히려 무중단이 깨졌기 때문에, 겹침 대신 **두 박스를 번갈아** 교체한다.
 
-> 참고: 현 운영은 이 1.9GB 박스에서 JVM 2개 겹침이 스왑을 갈아 무겹침(`NO_OVERLAP=1`)으로 돈다.
-> 진짜 무중단은 API를 OJ+EOJ 두 박스로 이중화하는 방향으로 설계돼 있다 — `deploy/redundancy.md` 참고.
+`rolling-deploy.sh`(OJ에서 실행)가 지휘하는 순서:
 
-### 박스 1회 설정
+```
+EOJ 드레인 → EOJ 교체·헬스체크 → EOJ 복귀 → OJ 드레인 → OJ 교체·헬스체크 → OJ 복귀
+   (그동안 OJ가 100% 서빙)              (그동안 EOJ가 100% 서빙)
+```
+
+- **드레인**은 nginx 레이어에서 한다 — `nginx/render-upstream.sh`가 해당 박스를 upstream에서
+  `down`으로 표시하고 reload. 드레인된 박스는 트래픽이 없으므로 **구 컨테이너를 먼저 내리고**
+  새 것을 단독 부팅해도 사용자에게는 보이지 않는다.
+- **박스 단위 롤백**: `deploy-api-single.sh`는 새 컨테이너가 `/api/health`(DB까지 확인)를 통과하지
+  못하면 구 컨테이너(`algoj-api-prev`)를 되살린다.
+- **전체 실패 시 안전망**: 어느 단계에서 죽어도 `rolling-deploy.sh`의 ERR 트랩이 upstream을
+  `none`(둘 다 활성)으로 되돌리고 non-zero로 끝낸다 → 사이트는 계속 서빙되고 CD만 빨간불.
+- 배포 중 다운타임 관찰(정상이라면 계속 200):
+  ```bash
+  while true; do curl -s -o /dev/null -w "%{http_code}\n" https://algoj.duckdns.org/api/health; sleep 0.2; done
+  ```
+
+> `deploy/deploy-api.sh`(단일 박스 블루-그린)는 이중화 전환 전에 쓰던 스크립트로, 지금은
+> CD 경로에서 쓰이지 않는다. 이력 참고용으로만 남아 있다.
+
+### OJ nginx 1회 설정
 
 ```bash
-# 0) (기존 운영 박스 전환 시만) 기존 compose api 컨테이너를 내려 8080 포트를 비운다.
-#    새 nginx-internal.conf 가 127.0.0.1:8080 을 점유하므로 충돌 방지.
-docker rm -f algoj-api 2>/dev/null || true
-
 # 1) nginx 설정 두 개 설치 (repo의 deploy/nginx/)
 sudo cp /opt/algoj/nginx/algoj-upstream.conf  /etc/nginx/conf.d/algoj-upstream.conf
 sudo cp /opt/algoj/nginx/algoj-internal.conf  /etc/nginx/conf.d/algoj-internal.conf
@@ -260,22 +182,12 @@ sudo chmod 440 /etc/sudoers.d/algoj-deploy
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+> `algoj-upstream.conf`는 설치 후 **손으로 고치지 않는다** — `render-upstream.sh`가 매 배포마다
+> 두 박스(`least_conn`, `max_fails=2 fail_timeout=10s`)로 다시 쓴다. 한쪽만 `down`으로 표시할 수
+> 있고 둘 다 내리는 건 막혀 있다(nginx가 전부 down인 upstream을 거부한다).
+>
 > 봇은 그대로 `OJ_API_BASE_URL=http://127.0.0.1:8080` 을 쓰면 된다 — `algoj-internal.conf`가
-> 8080을 활성 색으로 항상 연결해준다(블루-그린 포트와 무관).
-
-### 동작 / 운영
-
-- CD가 `deploy-api.sh`를 SSH로 실행: 새 색 컨테이너 기동 → `/api/health`(DB까지 확인) 통과 대기 →
-  `algoj-upstream.conf` 포트 교체 → `nginx -s reload` → 구 컨테이너 graceful drain(최대 60s).
-- **자동 안전 롤백**: 새 컨테이너가 헬스 통과 못 하면 nginx를 건드리지 않고 종료 → 구 컨테이너가 계속 서빙.
-- **메모리 / 무겹침 배포**: 이 ≈2GB 박스는 겹침(JVM 2개 동시)을 못 버텨서 CD는 `NO_OVERLAP=1`로 돈다 —
-  구 컨테이너를 먼저 내리고 새 것을 **단독 부팅**한다(안전 롤백 유지: 실패 시 구 컨테이너 재기동). 대신
-  배포 1회당 **~4~6분 다운타임**이 생긴다. 힙은 `-Xms128m -Xmx300m` + SerialGC로 캡한다. 이 다운타임을
-  없애려면 RAM을 늘려 겹침으로 복귀하면 된다 → 아래 **RAM 증설** 참고.
-- 배포 다운타임 관찰(무겹침에선 배포 중 잠깐 502가 정상):
-  ```bash
-  while true; do curl -s -o /dev/null -w "%{http_code}\n" https://algoj.duckdns.org/api/health; sleep 0.2; done
-  ```
+> 8080을 그때그때 살아있는 API로 연결해준다.
 
 ---
 
@@ -307,7 +219,7 @@ sudo nginx -T 2>/dev/null | grep -nE '^\s*(map|slice)\b'
 
 > nginx.org 공식 저장소로 갈아타 최신 업스트림을 직접 올리는 건 권장하지 않는다 —
 > certbot 연동·설정 경로가 바뀌고, 배포 파이프라인이 `/etc/sudoers.d/algoj-deploy`의
-> `/usr/sbin/nginx` 경로에 무인증 sudo를 물고 있어 블루-그린 전환이 깨질 수 있다.
+> `/usr/sbin/nginx` 경로에 무인증 sudo를 물고 있어 롤링 배포의 upstream 전환이 깨질 수 있다.
 > apt 업그레이드는 reload만 하고 리스닝 소켓을 유지하므로 무중단 배포에 영향 없다.
 
 ### 대응 기록
@@ -318,47 +230,20 @@ sudo nginx -T 2>/dev/null | grep -nE '^\s*(map|slice)\b'
 
 ---
 
-## RAM 증설 (Lightsail 2GB → 4GB) — 무중단 배포 복귀
+## RAM 증설 (Lightsail 2GB → 4GB) — 하지 않기로 결정
 
-이 박스는 ≈2GB라 겹침(JVM 2개)을 못 버텨 CD가 `NO_OVERLAP=1`(단독 부팅, 배포당 ~4~6분 다운타임)로 돈다.
-**RAM을 4GB로 올리면** 겹침 블루-그린이 다시 들어가 **무중단 배포로 복귀**하고 콜드 부팅도 빨라진다.
+> **결론: 증설하지 않는다.** 검토 기록으로만 남긴다 — 다시 안건으로 올리지 말 것.
 
-> **비용**: AWS 무료 플랜/크레딧 구간에는 4GB도 크레딧이 덮는다(2GB≈$12/월, 4GB≈$24/월 — 무료 구간 종료
-> 후 실제 청구). Lightsail은 **스케일 업만** 되고 스냅샷으로 축소가 안 되니(2GB로 되돌리려면 인스턴스를 새로
-> 생성) 유의.
+한 박스에서 JVM 2개를 겹치는 블루-그린이 ≈2GB에서 스왑을 갈아 무중단이 깨졌던 시절,
+**RAM을 4GB로 올려 겹침을 되살리자**는 안이 있었다(2GB≈$12/월 → 4GB≈$24/월).
 
-### 박스에서 할 일 (Lightsail 콘솔, 1회) — 전환 시 짧은 다운타임
+**대신 OJ+EOJ 이중화로 갔고, 그걸로 무중단 배포는 이미 확보됐다** — 박스당 JVM 1개씩
+번갈아 교체하므로 겹칠 일이 없고, 증설의 목적이 사라졌다. 이중화는 무중단에 더해 장애
+이중화(HA)까지 주므로 같은 돈이면 이쪽이 낫다. 비용·한계 비교는
+[`redundancy.md`](redundancy.md)의 **6. 비용 / 한계** 참고.
 
-Lightsail은 실행 중 인스턴스의 RAM만 늘리는 in-place 리사이즈가 없다. **스냅샷 → 더 큰 플랜으로 새 인스턴스**
-방식으로 한다.
-
-1. **스냅샷 생성**: 콘솔 → 해당 인스턴스 → **Snapshots** → *Create snapshot*. 디스크·데이터 전체가 담긴다
-   (MySQL/RabbitMQ 등은 Docker 볼륨에 있어 그대로 이관). 중요 데이터면 정합성을 위해 스냅샷 직전 잠깐
-   `docker stop algoj-api-blue`(또는 green) 후 촬영 → 완료 뒤 재기동.
-2. **스냅샷에서 새 인스턴스 생성**: 스냅샷 → *Create new instance* → 플랜에서 **4GB(medium)** 선택(같은
-   리전/AZ 권장). CLI 예: `aws lightsail create-instances-from-snapshot --bundle-id <4GB 번들>` — 번들 ID는
-   `aws lightsail get-bundles`로 현재 값 확인.
-3. **고정 IP 이전**: 콘솔 → **Networking** → Static IP를 기존 인스턴스에서 detach → 새 인스턴스에 attach.
-   도메인/DNS는 그대로 유지된다. **이 순간이 다운타임**(수십 초~수 분).
-4. **검증**: 새 인스턴스에 SSH →
-   ```bash
-   free -h                                                       # Mem 총량이 ~4Gi 인지
-   docker ps                                                     # mysql·rabbitmq·api·judge0·bot 전부 Up
-   curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/api/health   # 200
-   ```
-   컨테이너는 스냅샷 디스크에서 그대로 살아난다(스냅샷 시점의 blue/green 색이 뜸).
-5. 이상 없으면 **기존 2GB 인스턴스 삭제** → 이후 4GB만 과금/운영.
-
-### 증설 후 코드 반영 (PR — 4GB 확인 후에만)
-
-4GB로 올라가 겹침이 들어가면 CD를 무중단 겹침 배포로 되돌린다:
-
-- `cd.yml`: 배포 호출에서 **`NO_OVERLAP=1` 제거** → 겹침 블루-그린(무중단) 복귀.
-- (선택) `deploy-api.sh`: `HEALTH_TIMEOUT`을 다시 낮춤(예: 150s) — 4GB에선 부팅이 빠름.
-- 스왑(`/swapfile2`)·MySQL 다이어트·힙 캡·SerialGC는 남겨둬도 무방(여유 안전망).
-
-> **순서 엄수**: 박스가 4GB가 된 걸 확인한 **뒤에** 위 PR을 머지할 것. 2GB 상태에서 `NO_OVERLAP`을 빼면
-> 겹침 배포가 다시 실패한다.
+메모리가 다시 빠듯해지면 증설보다 먼저 볼 것: 힙 캡(`-Xmx300m`)·봇 128m·브로커 384m가
+그대로인지, 잔류 스왑이 남아 있지 않은지 (위 [트러블슈팅](#트러블슈팅)).
 
 ---
 
@@ -370,11 +255,16 @@ Lightsail은 실행 중 인스턴스의 RAM만 늘리는 in-place 리사이즈�
 
 - **재시작 내구성**: 큐/메시지가 durable이라 API·브로커가 재시작해도 대기 중인 채점이 유실되지 않는다.
   채점 도중 워커가 죽으면 unacked 메시지가 재전달되어 다시 채점된다(JUDGING 고아 상태 방지).
-- **블루-그린 겹침**: 배포 중 구/신 컨테이너가 동시에 컨슈머로 붙어도 안전하다(같은 큐를 나눠 소비).
+- **경쟁 소비**: 두 박스의 워커가 같은 큐를 나눠 받는다. 롤링 배포로 한쪽이 잠깐 빠져도 남은
+  박스가 계속 소비하므로 채점이 멈추지 않는다.
+- **스위퍼**: 브로커에 메시지가 유실돼 PENDING으로 남은 제출은 `PendingSubmissionSweeper`가
+  1분 주기로 재적재한다. 중복 실행이 낭비라 **한 박스에서만** 켠다 — OJ는 미설정(=활성),
+  EOJ는 `.env`에 `SWEEPER_ENABLED=false`. 확인:
+  `docker exec algoj-api env | grep SWEEPER_ENABLED` (자세한 건 `redundancy.md` §4).
 - **DLQ**: 역직렬화 실패 등으로 reject된 메시지는 `judge.queue.dlq`로 빠진다. 쌓이면 조사할 것.
 
-> **브로커 위치**: RabbitMQ는 이제 OJ가 아니라 **JJ(EC2) 박스**에서 돈다(Judge0와 함께 채점 인프라 통합,
-> API 이중화 준비). API는 `.env`의 `RABBITMQ_HOST`로 접근한다. 브로커 기동·보안그룹·이전 절차는
+> **브로커 위치**: RabbitMQ는 OJ가 아니라 **JJ(EC2) 박스**에서 돈다(Judge0와 함께 채점 인프라 통합).
+> API는 `.env`의 `RABBITMQ_HOST`로 접근한다. 브로커 기동·보안그룹·이전 절차는
 > `deploy/offload-components.md`의 **C. RabbitMQ → JJ**를, 이중화 설계는 `deploy/redundancy.md`를 참고.
 
 ### JJ 박스 브로커 기동 (1회)
@@ -392,11 +282,11 @@ openssl rand -base64 24   # → RABBITMQ_PASSWORD
 docker compose -f docker-compose.jj.yml --env-file .env up -d
 docker logs algoj-rabbitmq --tail 20
 
-# 3) JJ 보안그룹 inbound 5672 를 OJ(및 EOJ) 사설 IP로만 허용 (0.0.0.0/0 금지)
+# 3) JJ 보안그룹 inbound 5672 를 OJ·EOJ 사설 IP로만 허용 (0.0.0.0/0 금지)
 
-# 4) OJ .env 에 RABBITMQ_HOST=<JJ 사설IP> 설정 후 새 API 배포
-#    (deploy-api.sh 는 더 이상 RABBITMQ_HOST 를 주입하지 않는다 → .env 값 사용)
-IMAGE=ghcr.io/sjh1108/oj-api:latest bash deploy-api.sh
+# 4) OJ·EOJ 양쪽 .env 에 RABBITMQ_HOST=<JJ 사설IP> 설정 후 재배포
+#    (배포 스크립트는 RABBITMQ_HOST 를 주입하지 않는다 → .env 값이 그대로 쓰인다)
+cd /opt/algoj && IMAGE=ghcr.io/sjh1108/oj-api:latest bash rolling-deploy.sh   # OJ에서
 ```
 
 > 큐 상태 확인(JJ에서): `docker exec algoj-rabbitmq rabbitmqctl list_queues name messages consumers`
@@ -405,8 +295,8 @@ IMAGE=ghcr.io/sjh1108/oj-api:latest bash deploy-api.sh
 
 ## DB 마이그레이션 (Flyway)
 
-스키마는 **Flyway**가 관리한다. 이제 `.env`에 `SPRING_JPA_HIBERNATE_DDL_AUTO=update`를
-임시로 넣거나 서버에서 SQL을 직접 치는 방식(위 구버전 안내들)은 쓰지 않는다.
+스키마는 **Flyway**가 관리한다. `.env`에 `SPRING_JPA_HIBERNATE_DDL_AUTO=update`를 임시로
+넣거나 서버에서 SQL을 직접 치는 방식은 **더 이상 쓰지 않는다**.
 
 - 마이그레이션 파일: `src/main/resources/db/migration/V<N>__<설명>.sql`
 - 앱이 **부팅할 때** `flyway_schema_history` 테이블과 대조해 빠진 버전만 순서대로 적용한다.
@@ -415,8 +305,9 @@ IMAGE=ghcr.io/sjh1108/oj-api:latest bash deploy-api.sh
 - `V1__baseline.sql`은 Flyway 도입 시점의 스키마다. **기존 DB(프로드/로컬)는 첫 부팅 때
   baseline-on-migrate로 "이미 V1" 도장만 찍히고 V1은 실행되지 않는다** — 그 뒤 V2부터
   순서대로 적용된다. 빈 DB(새 로컬, CI)에서만 V1부터 전부 실행된다.
-- Hibernate는 모든 프로필에서 `ddl-auto=validate`: 엔티티와 DB가 어긋나면 부팅이 실패한다
-  (블루-그린이라 구버전이 계속 서빙됨).
+- Hibernate는 모든 프로필에서 `ddl-auto=validate`: 엔티티와 DB가 어긋나면 부팅이 실패한다.
+  롤링 배포에서는 첫 박스가 헬스체크를 통과 못 하고 롤백되므로 **구버전이 계속 서빙된다**
+  (두 번째 박스는 건드리기 전에 중단된다).
 
 ### 새 스키마 변경을 만들 때
 
@@ -469,22 +360,7 @@ openssl rand -base64 32      # → BOT_API_KEY 에 붙임
 > **JSON 401 인증 에러 페이지**만 뜬다. (봇이 API를 호출하는 주소 `OJ_API_BASE_URL`과 혼동 주의 —
 > 그건 백엔드, `OJ_WEB_BASE_URL`은 프론트.)
 
-### 3단계 — 백엔드 스키마 업데이트 (1회)
-
-이번 변경으로 `users` 테이블에 `discord_user_id` 컬럼이 추가된다. prod는 `ddl-auto=validate`라
-컬럼이 없으면 startup 실패 → **새 api 이미지 배포 시 1회만** 스키마 업데이트:
-
-```bash
-# .env 에 임시로 추가 후 api 재배포 → 컬럼 생성 확인 → 줄 제거하고 재배포
-echo "SPRING_JPA_HIBERNATE_DDL_AUTO=update" >> /opt/algoj/.env
-IMAGE=ghcr.io/sjh1108/oj-api:latest bash deploy-api.sh
-# 확인 (DB는 RDS — mysql 클라이언트로 접속):
-mysql -h "$(grep '^DB_HOST=' .env | cut -d= -f2)" -ualgoj -p"$(grep '^DB_PASSWORD=' .env | cut -d= -f2)" algoj \
-  -e "SHOW COLUMNS FROM users LIKE 'discord_user_id';"
-# 확인되면 .env 에서 SPRING_JPA_HIBERNATE_DDL_AUTO 줄 제거 후 다시 deploy-api.sh
-```
-
-### 4단계 — 봇 실행
+### 3단계 — 봇 실행
 
 봇 이미지는 CD가 `ghcr.io/<owner>/oj-bot:latest`로 빌드/푸시한다(패키지 public 또는 GHCR 로그인 필요).
 
@@ -506,7 +382,7 @@ docker logs algoj-bot --tail 30      # "Logged in as ..." + 슬래시 명령 등
 
 ### 배포 공지 — master 머지 시 자동 (opt-in)
 
-CD가 블루-그린 배포를 **성공**하고, 머지된 PR 본문에 **`## 공지` 섹션이 있을 때만**
+CD가 롤링 배포를 **성공**하고, 머지된 PR 본문에 **`## 공지` 섹션이 있을 때만**
 그 섹션의 내용을 봇의 로컬 공지 리스너(`127.0.0.1:3910`, `BOT_API_KEY`로 보호,
 외부 노출 없음)로 전달하고 봇이 지정 채널에 업데이트 임베드를 올린다.
 
@@ -536,11 +412,13 @@ docker compose -f docker-compose.bot.yml --env-file .env up -d --force-recreate 
 - 채널 ID를 안 넣으면 공지 기능만 조용히 꺼진다(배포는 정상 진행).
 - 봇이 죽어 있어도 배포는 실패하지 않는다 — 공지만 건너뛴다.
 
-> **봇 → 백엔드 연결**: prod compose는 API를 `127.0.0.1:8080`(루프백 전용)에만 바인딩하므로
-> 봇은 `docker-compose.bot.yml`의 `network_mode: host` + `OJ_API_BASE_URL=http://127.0.0.1:8080`
-> 으로 호스트 네트워크를 공유해 접근한다. (브릿지 `host.docker.internal`로는
-> `ECONNREFUSED`가 난다.) `/opt/algoj`에 `docker-compose.bot.yml`이 없으면 repo의
-> `deploy/docker-compose.bot.yml`을 그대로 올려두면 된다(CD는 prod compose만 자동 복사).
+> **봇 → 백엔드 연결**: 봇이 부르는 `127.0.0.1:8080`은 API가 아니라 **nginx의 내부 고정
+> 진입점**(`algoj-internal.conf`)이다 — 그때그때 살아있는 API로 넘겨주므로 롤링 배포 중에도
+> 주소가 안 바뀐다. 봇은 `docker-compose.bot.yml`의 `network_mode: host` +
+> `OJ_API_BASE_URL=http://127.0.0.1:8080`으로 호스트 네트워크를 공유해 접근한다.
+> (브릿지 `host.docker.internal`로는 `ECONNREFUSED`가 난다.) `/opt/algoj`에
+> `docker-compose.bot.yml`이 없으면 repo의 `deploy/docker-compose.bot.yml`을 그대로 올려두면
+> 된다 — CD는 배포 스크립트만 복사하고 봇 compose는 건드리지 않는다.
 
 ### 사용 흐름 (회원)
 

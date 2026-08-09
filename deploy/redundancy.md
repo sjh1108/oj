@@ -136,12 +136,38 @@ upstream algoj_api {
   havingValue="true", matchIfMissing=true)` — false인 박스는 빈 자체가 안 생겨
   `@Scheduled`가 등록되지 않는다. 미설정(기본)=활성이라 단일 박스는 그대로.
 
-**박스에서 할 일**: EOJ `/opt/algoj/.env`에 `SWEEPER_ENABLED=false` 추가(OJ는 미설정=활성 유지).
+**박스 설정**: EOJ `/opt/algoj/.env`에 `SWEEPER_ENABLED=false`(OJ는 미설정=활성 유지).
 반영은 다음 배포(롤링) 또는 EOJ 재기동 시.
+
+확인 — 컨테이너가 실제로 받은 값을 본다(`.env`만 보면 재배포 전인지 알 수 없다):
+
+```bash
+# EOJ 에서 — false 가 나와야 한다
+docker exec algoj-api env | grep SWEEPER_ENABLED     # → SWEEPER_ENABLED=false
+# OJ 에서 — 아무것도 안 나오는 게 정상(미설정=활성)
+docker exec algoj-api env | grep SWEEPER_ENABLED     # → (출력 없음)
+```
+
+값이 없거나 틀렸다면 EOJ에서:
+
+```bash
+cd /opt/algoj
+grep -q '^SWEEPER_ENABLED=' .env \
+  && sed -i 's/^SWEEPER_ENABLED=.*/SWEEPER_ENABLED=false/' .env \
+  || echo 'SWEEPER_ENABLED=false' >> .env
+# 컨테이너에 반영 — .env 는 기동 시점에만 읽히므로 재기동이 필요하다.
+# 롤링 배포를 기다려도 되고, 즉시 반영하려면 OJ 에서 EOJ 를 드레인한 뒤 재배포한다:
+#   (OJ)  bash nginx/render-upstream.sh eoj-down
+#   (EOJ) IMAGE=ghcr.io/sjh1108/oj-api:latest PORT=8080 PUBLISH_ADDR=0.0.0.0 bash deploy-api-single.sh
+#   (OJ)  bash nginx/render-upstream.sh none
+```
+
+> 안 맞춰도 정합성 문제는 없다 — 스위퍼는 멱등이고 재큐잉된 제출은 같은 판정을 낸다.
+> 두 박스가 같은 stale 제출을 각자 재적재해 **채점이 두 번 도는 낭비**만 생긴다.
 
 ---
 
-## 5. 박스에서 할 일 (수동 — PR로 자동화되지 않음)
+## 5. 박스 구축 기록 (수동 — PR로 자동화되지 않는 부분, 전부 완료)
 
 실제 IP: **OJ** `172.26.10.148` · **EOJ** `172.31.32.237`(사설)/`15.164.164.153`(공인) ·
 **JJ** `172.31.43.238`.
@@ -152,13 +178,15 @@ upstream algoj_api {
 - ✅ EOJ `/opt/algoj/.env` = OJ와 동일(JWT_SECRET 공유), `deploy-api-single.sh`로 기동·검증.
 - ✅ OJ·EOJ 둘 다 단일 박스 모델(`algoj-api`)로 통일, upstream 2-서버 active-active.
 
-**이 PR 머지 전 남은 준비**(OJ 지휘자 SSH용):
-1. **EOJ SG**: inbound **22** ← **OJ 사설 IP `172.26.10.148/32`** 추가(OJ→EOJ 사설 SSH).
-2. **OJ에 EOJ 키 배치**: `eoj.pem`을 `/opt/algoj/eoj.pem`로 복사, `chmod 600`.
-3. **OJ→EOJ SSH 확인**: `ssh -i /opt/algoj/eoj.pem ubuntu@172.31.32.237 'echo ok'`.
-   (EOJ IP가 바뀌면 `rolling-deploy.sh`의 `EOJ_HOST` 기본값 수정 또는 env 주입.)
+**롤링 배포용 준비도 완료** (CD가 이 경로로 배포에 성공하고 있으므로 셋 다 살아 있다):
+- ✅ **EOJ SG**: inbound **22** ← **OJ 사설 IP `172.26.10.148/32`**(OJ→EOJ 사설 SSH).
+- ✅ **OJ에 EOJ 키 배치**: `/opt/algoj/eoj.pem`, `chmod 600`.
+- ✅ **OJ→EOJ SSH**: `ssh -i /opt/algoj/eoj.pem ubuntu@172.31.32.237 'echo ok'`.
 
-> 스케줄러 중복 제거(§4)를 적용하려면 EOJ `.env`에 `SWEEPER_ENABLED=false`도.
+> EOJ IP가 바뀌면 `rolling-deploy.sh`의 `EOJ_HOST` 기본값을 고치거나 env로 주입해야 한다 —
+> 배포가 SSH 단계에서 멈추면 여기를 먼저 본다.
+>
+> 스케줄러 중복 제거(§4)의 `SWEEPER_ENABLED=false`는 위 §4의 확인 명령으로 점검한다.
 
 ---
 
@@ -176,10 +204,12 @@ upstream algoj_api {
 
 ---
 
-## 구현 순서 요약
+## 구현 순서 요약 (전부 완료)
 
-1. (선행) RabbitMQ→JJ 이전 + `deploy-api.sh`의 `RABBITMQ_HOST` 하드코딩 제거.
-2. EOJ 프로비저닝 + SG/peering (§5, 박스에서 할 일).
-3. `deploy-api-single.sh` + `render-upstream.sh` + upstream conf 2-서버화 (PR).
-4. `cd.yml` 6단계 롤링 오케스트레이션 (PR).
-5. (선택) 스위퍼 env 게이트 (§4, 별도 PR).
+1. ✅ (선행) RabbitMQ→JJ 이전 + `deploy-api.sh`의 `RABBITMQ_HOST` 하드코딩 제거.
+2. ✅ EOJ 프로비저닝 + SG/peering (§5).
+3. ✅ `deploy-api-single.sh` + `render-upstream.sh` + upstream conf 2-서버화.
+4. ✅ `cd.yml` 6단계 롤링 오케스트레이션.
+5. ✅ 스위퍼 env 게이트 (§4).
+
+이 문서에 남은 미결 항목은 없다. 운영 절차는 [`README.md`](README.md)를 본다.

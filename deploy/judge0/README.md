@@ -1,15 +1,20 @@
-# Judge0에 PyPy 3 추가하기
+# Judge0에 PyPy 3 추가하기 (적용 완료)
+
+> **PyPy 3는 이미 채점 언어로 붙어 있다.** 아래는 당시의 박스 작업 기록이고, 다시 할 일이 아니다.
+> Judge0 박스를 새로 세우거나 컨테이너를 갈아엎을 때 같은 절차를 다시 밟으면 된다.
+>
+> 확인(JJ에서): `curl -s http://127.0.0.1:2358/languages | grep -i pypy`
 
 스톡 Judge0 CE(≤1.13.1)에는 PyPy가 없다 (Python은 CPython 2.7/3.8뿐).
 PyPy 3를 채점 언어로 쓰려면 **Judge0 박스에서 한 번의 수동 작업**이 필요하다.
 앱 쪽(백엔드 enum `PYPY3(200)`, `V4` 마이그레이션, 프론트 언어 선택지)은
 PR 머지 → CI/CD 배포로 자동 반영된다.
 
-> **순서 중요**: 아래 박스 작업을 먼저 끝낸 뒤 앱을 배포하는 것을 권장.
+> **순서 중요**: 박스 작업을 먼저 끝낸 뒤 앱을 배포한다.
 > 반대로 하면 박스 작업이 끝날 때까지 PyPy 3 제출이 채점 서버 오류(S002)로 실패한다
 > (죽지는 않고, 해당 제출만 SYSTEM_ERROR 처리).
 
-## 박스에서 할 일 (수동, 1회)
+## 박스 작업 (수동, 1회)
 
 ### 1. 포터블 PyPy 내려받기 (호스트)
 
@@ -43,7 +48,7 @@ services:
 ```
 
 ```bash
-cd <judge0 설치 폴더>
+cd ~/judge0/judge0-v1.13.1        # JJ 박스의 Judge0 compose 폴더
 docker compose up -d          # server/workers 재생성
 docker compose exec workers /usr/local/pypy3/bin/pypy3 --version   # 동작 확인
 ```
