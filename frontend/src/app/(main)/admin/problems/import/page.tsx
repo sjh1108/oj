@@ -1,6 +1,17 @@
 "use client";
 
-import { CircleCheckIcon, Loader2Icon, OctagonXIcon, Trash2, TriangleAlertIcon, UploadIcon } from "lucide-react";
+import {
+  ArrowDownAZIcon,
+  ArrowDownIcon,
+  ArrowUpIcon,
+  CircleCheckIcon,
+  GripVerticalIcon,
+  Loader2Icon,
+  OctagonXIcon,
+  Trash2,
+  TriangleAlertIcon,
+  UploadIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -37,6 +48,13 @@ interface ImportItem {
 }
 
 let nextKey = 1;
+
+// A multi-file drop hands over dataTransfer.files in whatever order the OS/browser
+// happened to collect them — for Chrome that is the file you grabbed first, then
+// the rest — so the list (and therefore the #id order) came out shuffled. Sort every
+// incoming batch by file name instead, numerically so "2.md" precedes "10.md".
+const nameCollator = new Intl.Collator("ko", { numeric: true, sensitivity: "base" });
+const byFileName = (a: File, b: File) => nameCollator.compare(a.name, b.name);
 
 // Everything must clear the reverse proxy's ~1MB body limit, with headroom for
 // JSON escaping. Requests under SAFE_REQUEST_BYTES go out in one shot; larger
@@ -235,6 +253,9 @@ export default function ImportProblemsPage() {
   const [items, setItems] = useState<ImportItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  // Row being dragged, and the row it is currently hovering over.
+  const [dragKey, setDragKey] = useState<number | null>(null);
+  const [dropKey, setDropKey] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -244,26 +265,66 @@ export default function ImportProblemsPage() {
     }
   }, [user, router]);
 
-  const addFiles = useCallback(async (files: FileList | File[]) => {
-    const next: ImportItem[] = [];
-    for (const file of Array.from(files)) {
-      try {
-        const parsed = parseProblemFile(await file.text());
-        next.push({ key: nextKey++, fileName: file.name, parsed, status: "parsed" });
-      } catch (err) {
-        next.push({
-          key: nextKey++,
-          fileName: file.name,
-          status: "parse_error",
-          message: err instanceof Error ? err.message : "파싱 실패",
-        });
+  // Reading files is async, so two quick drops could otherwise append in
+  // completion order rather than drop order. Chain the batches to keep them ordered.
+  const appendQueue = useRef<Promise<void>>(Promise.resolve());
+
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const batch = Array.from(files).sort(byFileName);
+    appendQueue.current = appendQueue.current.then(async () => {
+      const next: ImportItem[] = [];
+      for (const file of batch) {
+        try {
+          const parsed = parseProblemFile(await file.text());
+          next.push({ key: nextKey++, fileName: file.name, parsed, status: "parsed" });
+        } catch (err) {
+          next.push({
+            key: nextKey++,
+            fileName: file.name,
+            status: "parse_error",
+            message: err instanceof Error ? err.message : "파싱 실패",
+          });
+        }
       }
-    }
-    setItems((prev) => [...prev, ...next]);
+      setItems((prev) => [...prev, ...next]);
+    });
   }, []);
 
   const removeItem = (key: number) =>
     setItems((prev) => prev.filter((it) => it.key !== key));
+
+  // Manual override for cases where file names don't encode the intended order.
+  const moveItem = (index: number, delta: number) =>
+    setItems((prev) => {
+      const to = index + delta;
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[to]] = [next[to], next[index]];
+      return next;
+    });
+
+  // Pull the dragged row out and drop it into the target row's slot, pushing the
+  // rest along — the same result the insertion line drawn during the drag shows.
+  const reorder = (fromKey: number, toKey: number) =>
+    setItems((prev) => {
+      const from = prev.findIndex((it) => it.key === fromKey);
+      const to = prev.findIndex((it) => it.key === toKey);
+      if (from < 0 || to < 0 || from === to) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+
+  const endDrag = () => {
+    setDragKey(null);
+    setDropKey(null);
+  };
+
+  const sortByFileName = () =>
+    setItems((prev) =>
+      [...prev].sort((a, b) => nameCollator.compare(a.fileName, b.fileName)),
+    );
 
   const uploadable = items.filter((it) => it.status === "parsed");
 
@@ -354,6 +415,9 @@ export default function ImportProblemsPage() {
             <p className="text-xs text-muted-foreground">
               여러 파일을 한 번에 선택할 수 있습니다 · 형식은 템플릿 참고
             </p>
+            <p className="text-xs text-muted-foreground">
+              불러온 파일은 파일명 순(숫자 인식)으로 정렬되며, 목록 순서대로 등록됩니다
+            </p>
             <input
               ref={inputRef}
               type="file"
@@ -375,7 +439,21 @@ export default function ImportProblemsPage() {
             <CardTitle className="text-base">
               불러온 파일 {items.length}개
               {uploadable.length > 0 && ` · 업로드 가능 ${uploadable.length}개`}
+              <span className="block text-xs font-normal text-muted-foreground mt-0.5">
+                위에서부터 순서대로 등록됩니다 · 끌어서 순서 변경
+              </span>
             </CardTitle>
+            <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={uploading || items.length < 2}
+              onClick={sortByFileName}
+            >
+              <ArrowDownAZIcon className="size-4 mr-1" />
+              이름순 정렬
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -391,10 +469,65 @@ export default function ImportProblemsPage() {
                 `${uploadable.length}개 문제 등록`
               )}
             </Button>
+            </div>
           </CardHeader>
           <CardContent className="divide-y p-0">
-            {items.map((it) => (
-              <div key={it.key} className="flex items-center gap-3 px-4 py-3">
+            {items.map((it, index) => {
+              const draggable = !uploading && it.createdId == null;
+              const dragIndex =
+                dragKey == null ? -1 : items.findIndex((o) => o.key === dragKey);
+              // Insertion line on the edge the dragged row will land against.
+              // Inline so it can't lose to the divide-y borders on these rows.
+              const showMarker =
+                dropKey === it.key && dragIndex >= 0 && dragIndex !== index;
+              const markerStyle = showMarker
+                ? {
+                    boxShadow: `inset 0 ${dragIndex < index ? "-2px" : "2px"} 0 0 var(--primary)`,
+                  }
+                : undefined;
+              return (
+              <div
+                key={it.key}
+                draggable={draggable}
+                onDragStart={(e) => {
+                  setDragKey(it.key);
+                  e.dataTransfer.effectAllowed = "move";
+                  // Firefox only starts a drag once data is set.
+                  e.dataTransfer.setData("text/plain", String(it.key));
+                }}
+                onDragEnd={endDrag}
+                onDragOver={(e) => {
+                  if (dragKey == null || dragKey === it.key) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  setDropKey(it.key);
+                }}
+                onDragLeave={() =>
+                  setDropKey((k) => (k === it.key ? null : k))
+                }
+                onDrop={(e) => {
+                  if (dragKey == null) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  reorder(dragKey, it.key);
+                  endDrag();
+                }}
+                style={markerStyle}
+                className={`flex items-center gap-3 px-4 py-3 ${
+                  dragKey === it.key ? "opacity-40" : ""
+                } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+              >
+                <span className="shrink-0 flex items-center gap-1">
+                  <GripVerticalIcon
+                    className={`size-4 ${
+                      draggable ? "text-muted-foreground" : "text-transparent"
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span className="w-6 text-xs tabular-nums text-muted-foreground text-right">
+                    {index + 1}
+                  </span>
+                </span>
                 <span className="shrink-0">
                   {it.status === "parsed" && (
                     <Badge variant="outline" className="text-muted-foreground">대기</Badge>
@@ -437,6 +570,30 @@ export default function ImportProblemsPage() {
                     {it.status === "failed" && ` · ❌ ${it.message}`}
                   </p>
                 </div>
+                {it.createdId == null && (
+                  <div className="flex shrink-0">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={uploading || index === 0}
+                      onClick={() => moveItem(index, -1)}
+                      aria-label="위로 이동"
+                    >
+                      <ArrowUpIcon className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={uploading || index === items.length - 1}
+                      onClick={() => moveItem(index, 1)}
+                      aria-label="아래로 이동"
+                    >
+                      <ArrowDownIcon className="size-4" />
+                    </Button>
+                  </div>
+                )}
                 {it.createdId != null ? (
                   <Button
                     variant="outline"
@@ -458,7 +615,8 @@ export default function ImportProblemsPage() {
                   </Button>
                 )}
               </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       )}
