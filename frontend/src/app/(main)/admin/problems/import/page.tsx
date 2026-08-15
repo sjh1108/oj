@@ -5,6 +5,7 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   CircleCheckIcon,
+  GripVerticalIcon,
   Loader2Icon,
   OctagonXIcon,
   Trash2,
@@ -252,6 +253,9 @@ export default function ImportProblemsPage() {
   const [items, setItems] = useState<ImportItem[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  // Row being dragged, and the row it is currently hovering over.
+  const [dragKey, setDragKey] = useState<number | null>(null);
+  const [dropKey, setDropKey] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -298,6 +302,24 @@ export default function ImportProblemsPage() {
       [next[index], next[to]] = [next[to], next[index]];
       return next;
     });
+
+  // Pull the dragged row out and drop it into the target row's slot, pushing the
+  // rest along — the same result the insertion line drawn during the drag shows.
+  const reorder = (fromKey: number, toKey: number) =>
+    setItems((prev) => {
+      const from = prev.findIndex((it) => it.key === fromKey);
+      const to = prev.findIndex((it) => it.key === toKey);
+      if (from < 0 || to < 0 || from === to) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+
+  const endDrag = () => {
+    setDragKey(null);
+    setDropKey(null);
+  };
 
   const sortByFileName = () =>
     setItems((prev) =>
@@ -418,7 +440,7 @@ export default function ImportProblemsPage() {
               불러온 파일 {items.length}개
               {uploadable.length > 0 && ` · 업로드 가능 ${uploadable.length}개`}
               <span className="block text-xs font-normal text-muted-foreground mt-0.5">
-                위에서부터 순서대로 등록됩니다
+                위에서부터 순서대로 등록됩니다 · 끌어서 순서 변경
               </span>
             </CardTitle>
             <div className="flex gap-2">
@@ -450,10 +472,61 @@ export default function ImportProblemsPage() {
             </div>
           </CardHeader>
           <CardContent className="divide-y p-0">
-            {items.map((it, index) => (
-              <div key={it.key} className="flex items-center gap-3 px-4 py-3">
-                <span className="shrink-0 w-6 text-xs tabular-nums text-muted-foreground text-right">
-                  {index + 1}
+            {items.map((it, index) => {
+              const draggable = !uploading && it.createdId == null;
+              const dragIndex =
+                dragKey == null ? -1 : items.findIndex((o) => o.key === dragKey);
+              // Insertion line on the edge the dragged row will land against.
+              // Inline so it can't lose to the divide-y borders on these rows.
+              const showMarker =
+                dropKey === it.key && dragIndex >= 0 && dragIndex !== index;
+              const markerStyle = showMarker
+                ? {
+                    boxShadow: `inset 0 ${dragIndex < index ? "-2px" : "2px"} 0 0 var(--primary)`,
+                  }
+                : undefined;
+              return (
+              <div
+                key={it.key}
+                draggable={draggable}
+                onDragStart={(e) => {
+                  setDragKey(it.key);
+                  e.dataTransfer.effectAllowed = "move";
+                  // Firefox only starts a drag once data is set.
+                  e.dataTransfer.setData("text/plain", String(it.key));
+                }}
+                onDragEnd={endDrag}
+                onDragOver={(e) => {
+                  if (dragKey == null || dragKey === it.key) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  setDropKey(it.key);
+                }}
+                onDragLeave={() =>
+                  setDropKey((k) => (k === it.key ? null : k))
+                }
+                onDrop={(e) => {
+                  if (dragKey == null) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  reorder(dragKey, it.key);
+                  endDrag();
+                }}
+                style={markerStyle}
+                className={`flex items-center gap-3 px-4 py-3 ${
+                  dragKey === it.key ? "opacity-40" : ""
+                } ${draggable ? "cursor-grab active:cursor-grabbing" : ""}`}
+              >
+                <span className="shrink-0 flex items-center gap-1">
+                  <GripVerticalIcon
+                    className={`size-4 ${
+                      draggable ? "text-muted-foreground" : "text-transparent"
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span className="w-6 text-xs tabular-nums text-muted-foreground text-right">
+                    {index + 1}
+                  </span>
                 </span>
                 <span className="shrink-0">
                   {it.status === "parsed" && (
@@ -542,7 +615,8 @@ export default function ImportProblemsPage() {
                   </Button>
                 )}
               </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       )}
