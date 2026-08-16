@@ -112,7 +112,9 @@ export default function ProblemDetailPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // 태그는 풀이 방향을 알려주는 스포일러라 기본은 숨김 — 보고 싶을 때만 펼친다.
   // 문제를 옮길 때마다 다시 접히도록 페이지 상태로만 둔다(저장하지 않음).
+  // 보기 설정에서 "태그 기본 표시"를 켜면 펼치지 않아도 항상 보인다.
   const [tagsRevealed, setTagsRevealed] = useState(false);
+  const tagsVisible = view.showTags || tagsRevealed;
   // 지문 접기(에디터 집중 모드) / 예제·사용자 케이스 섹션 여닫기.
   const [statementHidden, setStatementHidden] = useState(false);
   const [samplesOpen, setSamplesOpen] = useState(true);
@@ -360,7 +362,7 @@ export default function ProblemDetailPage() {
               </h1>
               <DifficultyBadge difficulty={p.difficulty} />
               {p.tags.length > 0 &&
-                (tagsRevealed ? (
+                (tagsVisible ? (
                   p.tags.map((t) => (
                     <Badge
                       key={t}
@@ -983,6 +985,24 @@ export default function ProblemDetailPage() {
                     </Button>
                   </div>
                 </div>
+                <label className="flex items-center justify-between gap-3 cursor-pointer">
+                  <span>
+                    태그 기본 표시
+                    <span className="block text-xs text-muted-foreground">
+                      문제 목록과 문제 페이지에서 태그를 접지 않고 보여줍니다
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={view.showTags}
+                    onChange={(e) => {
+                      updateView({ showTags: e.target.checked });
+                      // 끄는 즉시 다시 감춰지도록 이 페이지에서 펼친 상태도 접는다.
+                      if (!e.target.checked) setTagsRevealed(false);
+                    }}
+                    className="size-4 shrink-0 rounded border-input"
+                  />
+                </label>
               </CardContent>
             </Card>
           )}

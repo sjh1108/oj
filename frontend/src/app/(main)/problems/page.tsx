@@ -1,11 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { CircleCheckIcon, CircleDotIcon, SearchIcon } from "lucide-react";
+import { CircleCheckIcon, CircleDotIcon, SearchIcon, TagIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { problemsApi } from "@/lib/problems-api";
+import { useViewSettings } from "@/lib/editor-settings";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -41,6 +43,9 @@ export default function ProblemsPage() {
   const [difficulty, setDifficulty] = useState<Difficulty | "">("");
   const [tag, setTag] = useState("");
   const [solved, setSolved] = useState<SolvedFilter>("ALL");
+
+  // 태그 노출 여부는 문제 페이지의 보기 설정과 같은 값을 쓴다(localStorage).
+  const [view, updateView] = useViewSettings();
 
   const list = useQuery({
     queryKey: ["problems", page, keyword, difficulty, tag, solved],
@@ -121,6 +126,17 @@ export default function ProblemsPage() {
             </option>
           ))}
         </select>
+        <Button
+          type="button"
+          variant={view.showTags ? "secondary" : "outline"}
+          size="lg"
+          aria-pressed={view.showTags}
+          title="태그를 목록과 문제 페이지에 항상 표시합니다"
+          onClick={() => updateView({ showTags: !view.showTags })}
+        >
+          <TagIcon className="size-4" />
+          {view.showTags ? "태그 숨기기" : "태그 보기"}
+        </Button>
       </div>
 
       {list.isLoading && (
@@ -167,8 +183,18 @@ export default function ProblemsPage() {
                     (비공개)
                   </span>
                 )}
-                {/* 태그는 풀이 방향을 알려주는 스포일러라 목록에 노출하지 않는다.
-                    찾아볼 사람은 위의 태그 필터를 쓰면 된다. */}
+                {/* 태그는 풀이 방향을 알려주는 스포일러라 기본은 감춘다.
+                    보기를 켠 사람에게만 노출한다(위의 "태그 보기" 토글). */}
+                {view.showTags &&
+                  p.tags.map((t) => (
+                    <Badge
+                      key={t}
+                      variant="outline"
+                      className="hidden sm:inline-flex shrink-0 text-muted-foreground"
+                    >
+                      {t}
+                    </Badge>
+                  ))}
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 {p.authorUsername && (
