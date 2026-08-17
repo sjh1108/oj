@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { problemsApi } from "@/lib/problems-api";
-import { useViewSettings } from "@/lib/editor-settings";
+import { usePreferences } from "@/lib/preferences";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -44,8 +44,8 @@ export default function ProblemsPage() {
   const [tag, setTag] = useState("");
   const [solved, setSolved] = useState<SolvedFilter>("ALL");
 
-  // 태그 노출 여부는 문제 페이지의 보기 설정과 같은 값을 쓴다(localStorage).
-  const [view, updateView] = useViewSettings();
+  // 태그 노출 여부는 계정 설정 — 내 계정·문제 페이지와 같은 값을 쓴다.
+  const { preferences, updatePreferences } = usePreferences();
 
   const list = useQuery({
     queryKey: ["problems", page, keyword, difficulty, tag, solved],
@@ -128,14 +128,14 @@ export default function ProblemsPage() {
         </select>
         <Button
           type="button"
-          variant={view.showTags ? "secondary" : "outline"}
+          variant={preferences.showTags ? "secondary" : "outline"}
           size="lg"
-          aria-pressed={view.showTags}
-          title="태그를 목록과 문제 페이지에 항상 표시합니다"
-          onClick={() => updateView({ showTags: !view.showTags })}
+          aria-pressed={preferences.showTags}
+          title="태그를 목록과 문제 페이지에 항상 표시합니다 (계정에 저장)"
+          onClick={() => updatePreferences({ showTags: !preferences.showTags })}
         >
           <TagIcon className="size-4" />
-          {view.showTags ? "태그 숨기기" : "태그 보기"}
+          {preferences.showTags ? "태그 숨기기" : "태그 보기"}
         </Button>
       </div>
 
@@ -185,7 +185,7 @@ export default function ProblemsPage() {
                 )}
                 {/* 태그는 풀이 방향을 알려주는 스포일러라 기본은 감춘다.
                     보기를 켠 사람에게만 노출한다(위의 "태그 보기" 토글). */}
-                {view.showTags &&
+                {preferences.showTags &&
                   p.tags.map((t) => (
                     <Badge
                       key={t}

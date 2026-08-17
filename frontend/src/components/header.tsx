@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
@@ -7,6 +8,7 @@ import { Button } from "@/components/ui/button";
 
 export function Header() {
   const router = useRouter();
+  const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
@@ -64,6 +66,9 @@ export function Header() {
             size="sm"
             onClick={() => {
               logout();
+              // 캐시에는 계정 설정·푼 문제 등 개인 데이터가 남아 있다 —
+              // 공용 PC에서 다음 사람에게 보이지 않도록 비운다.
+              qc.clear();
               router.push("/login");
             }}
           >

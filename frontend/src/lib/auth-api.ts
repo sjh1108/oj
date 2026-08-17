@@ -5,6 +5,7 @@ import type {
   LoginRequest,
   SignupRequest,
   TokenResponse,
+  UserPreferences,
   UserResponse,
 } from "@/types/api";
 
@@ -17,6 +18,9 @@ export const authApi = {
   mySolvedProblems: () => api<number[]>("/api/users/me/solved-problems"),
   changePassword: (body: ChangePasswordRequest) =>
     api<void>("/api/users/me/password", { method: "PUT", body }),
+  preferences: () => api<UserPreferences>("/api/users/me/preferences"),
+  updatePreferences: (body: UserPreferences) =>
+    api<UserPreferences>("/api/users/me/preferences", { method: "PUT", body }),
   discordLinkCode: () =>
     api<DiscordLinkCodeResponse>("/api/users/me/discord/link-code", {
       method: "POST",

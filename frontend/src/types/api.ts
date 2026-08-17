@@ -39,6 +39,11 @@ export interface UserResponse {
   createdAt: string;
 }
 
+// 계정에 저장되는 개인 보기 설정(기기 간 공유). 설정이 늘면 이 인터페이스에 필드를 추가한다.
+export interface UserPreferences {
+  showTags: boolean;
+}
+
 export interface TokenResponse {
   accessToken: string;
   refreshToken: string;

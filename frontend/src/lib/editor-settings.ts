@@ -2,16 +2,15 @@
 
 import { useEffect, useState } from "react";
 
-// User-tunable view settings for the problem pages (editor, statement, tags),
+// Device-local view settings for the problem page (editor + statement),
 // persisted in localStorage so they stick across problems and visits.
+// Settings that belong to the account instead (and follow the user across
+// devices) live in preferences.ts, backed by /api/users/me/preferences.
 export interface ViewSettings {
   editorFontSize: number;
   editorFontFamily: string; // "" = Monaco default
   wordWrap: boolean;
   statementFontSize: number;
-  // 태그는 풀이 방향 스포일러라 기본은 숨김 — 켜면 문제 목록/문제 페이지에서
-  // 접지 않고 바로 보여준다.
-  showTags: boolean;
 }
 
 export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
@@ -19,7 +18,6 @@ export const DEFAULT_VIEW_SETTINGS: ViewSettings = {
   editorFontFamily: "",
   wordWrap: false,
   statementFontSize: 15,
-  showTags: false,
 };
 
 // Local font stacks only — no webfont download; falls back to any installed one.

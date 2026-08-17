@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
 import { authApi } from "@/lib/auth-api";
 import { useAuthStore } from "@/lib/auth-store";
-import { useViewSettings } from "@/lib/editor-settings";
+import { usePreferences } from "@/lib/preferences";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -61,8 +61,8 @@ export default function AccountPage() {
     },
   });
 
-  // 문제 페이지·문제 목록과 같은 보기 설정을 공유한다(localStorage).
-  const [view, updateView] = useViewSettings();
+  // 문제 페이지·문제 목록과 같은 계정 설정을 공유한다(서버 저장).
+  const { preferences, updatePreferences } = usePreferences();
 
   const [linkCode, setLinkCode] = useState<DiscordLinkCodeResponse | null>(null);
   const linkMutation = useMutation({
@@ -155,13 +155,14 @@ export default function AccountPage() {
               태그 기본 표시
               <span className="block text-xs text-muted-foreground">
                 문제 목록과 문제 페이지에서 태그를 접지 않고 바로 보여줍니다.
-                꺼두면 &quot;태그 보기&quot;를 눌렀을 때만 보입니다.
+                꺼두면 &quot;태그 보기&quot;를 눌렀을 때만 보입니다. 계정에
+                저장되므로 다른 기기에서도 그대로 적용됩니다.
               </span>
             </span>
             <input
               type="checkbox"
-              checked={view.showTags}
-              onChange={(e) => updateView({ showTags: e.target.checked })}
+              checked={preferences.showTags}
+              onChange={(e) => updatePreferences({ showTags: e.target.checked })}
               className="mt-0.5 size-4 shrink-0 rounded border-input"
             />
           </label>

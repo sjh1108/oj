@@ -43,6 +43,7 @@ import {
   clampFontSize,
   useViewSettings,
 } from "@/lib/editor-settings";
+import { usePreferences } from "@/lib/preferences";
 import { Markdown } from "@/components/markdown";
 import { DifficultyBadge } from "@/components/status-badge";
 import type { Language, RunResponse } from "@/types/api";
@@ -109,12 +110,14 @@ export default function ProblemDetailPage() {
 
   // 보기 설정(에디터 폰트/크기/줄바꿈, 지문 크기) — localStorage에 유지.
   const [view, updateView] = useViewSettings();
+  // 태그 노출은 계정 설정(서버) — 기기가 달라도 따라온다.
+  const { preferences, updatePreferences } = usePreferences();
   const [settingsOpen, setSettingsOpen] = useState(false);
   // 태그는 풀이 방향을 알려주는 스포일러라 기본은 숨김 — 보고 싶을 때만 펼친다.
   // 문제를 옮길 때마다 다시 접히도록 페이지 상태로만 둔다(저장하지 않음).
   // 보기 설정에서 "태그 기본 표시"를 켜면 펼치지 않아도 항상 보인다.
   const [tagsRevealed, setTagsRevealed] = useState(false);
-  const tagsVisible = view.showTags || tagsRevealed;
+  const tagsVisible = preferences.showTags || tagsRevealed;
   // 지문 접기(에디터 집중 모드) / 예제·사용자 케이스 섹션 여닫기.
   const [statementHidden, setStatementHidden] = useState(false);
   const [samplesOpen, setSamplesOpen] = useState(true);
@@ -994,9 +997,9 @@ export default function ProblemDetailPage() {
                   </span>
                   <input
                     type="checkbox"
-                    checked={view.showTags}
+                    checked={preferences.showTags}
                     onChange={(e) => {
-                      updateView({ showTags: e.target.checked });
+                      updatePreferences({ showTags: e.target.checked });
                       // 끄는 즉시 다시 감춰지도록 이 페이지에서 펼친 상태도 접는다.
                       if (!e.target.checked) setTagsRevealed(false);
                     }}
