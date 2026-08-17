@@ -5,6 +5,7 @@ import dev.algoj.domain.problem.entity.Subtask;
 import dev.algoj.domain.problem.entity.TestCase;
 import dev.algoj.domain.submission.entity.Submission;
 import dev.algoj.domain.user.entity.User;
+import dev.algoj.domain.user.entity.UserPreferences;
 import org.hibernate.boot.Metadata;
 import org.hibernate.boot.MetadataSources;
 import org.hibernate.boot.registry.StandardServiceRegistry;
@@ -35,6 +36,7 @@ class SchemaDdlGenerator {
                 .build();
         Metadata metadata = new MetadataSources(registry)
                 .addAnnotatedClass(User.class)
+                .addAnnotatedClass(UserPreferences.class)
                 .addAnnotatedClass(Problem.class)
                 .addAnnotatedClass(TestCase.class)
                 .addAnnotatedClass(Subtask.class)

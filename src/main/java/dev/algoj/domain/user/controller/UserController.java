@@ -3,11 +3,14 @@ package dev.algoj.domain.user.controller;
 import dev.algoj.domain.submission.service.SubmissionService;
 import dev.algoj.domain.user.dto.ChangePasswordRequest;
 import dev.algoj.domain.user.dto.DiscordLinkCodeResponse;
+import dev.algoj.domain.user.dto.UpdateUserPreferencesRequest;
+import dev.algoj.domain.user.dto.UserPreferencesResponse;
 import dev.algoj.domain.user.dto.UserResponse;
 import dev.algoj.domain.user.entity.User;
 import dev.algoj.domain.user.repository.UserRepository;
 import dev.algoj.domain.user.service.AuthService;
 import dev.algoj.domain.user.service.DiscordAccountService;
+import dev.algoj.domain.user.service.UserPreferencesService;
 import dev.algoj.global.exception.BusinessException;
 import dev.algoj.global.exception.ErrorCode;
 import dev.algoj.global.security.UserPrincipal;
@@ -33,6 +36,7 @@ public class UserController {
     private final SubmissionService submissionService;
     private final AuthService authService;
     private final DiscordAccountService discordAccountService;
+    private final UserPreferencesService userPreferencesService;
 
     @GetMapping("/me")
     public ResponseEntity<UserResponse> me(@AuthenticationPrincipal UserPrincipal principal) {
@@ -53,6 +57,19 @@ public class UserController {
             @Valid @RequestBody ChangePasswordRequest request) {
         authService.changePassword(principal.getId(), request);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/me/preferences")
+    public ResponseEntity<UserPreferencesResponse> preferences(
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.ok(userPreferencesService.get(principal.getId()));
+    }
+
+    @PutMapping("/me/preferences")
+    public ResponseEntity<UserPreferencesResponse> updatePreferences(
+            @AuthenticationPrincipal UserPrincipal principal,
+            @Valid @RequestBody UpdateUserPreferencesRequest request) {
+        return ResponseEntity.ok(userPreferencesService.update(principal.getId(), request));
     }
 
     @PostMapping("/me/discord/link-code")
