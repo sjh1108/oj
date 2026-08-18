@@ -559,6 +559,19 @@ export function parseProblemFile(raw: string): ParsedProblem {
   return parsed;
 }
 
+/** Cases written straight into the create request (subtask cases included). */
+export const inlineCaseCount = (p: ParsedProblem) =>
+  p.subtasks && p.subtasks.length > 0
+    ? p.subtasks.reduce((n, st) => n + st.testCases.length, 0)
+    : p.testCases.length;
+
+/**
+ * How many cases the finished problem should hold. Compared against what the
+ * server actually has to tell a completed upload from one that was cut off.
+ */
+export const expectedCaseCount = (p: ParsedProblem) =>
+  inlineCaseCount(p) + (p.generator?.cases.length ?? 0);
+
 /** Convert a parsed file straight into the create-problem API payload
  *  (form units → API units: seconds→ms, MB→KB; running orderIndex). */
 export function toCreateProblemRequest(p: ParsedProblem): CreateProblemRequest {
