@@ -8,8 +8,10 @@ import type {
   ProblemDetailResponse,
   ProblemListItem,
   ProblemListParams,
+  TestCaseMetaRequest,
   TestCaseRequest,
   TestCaseResponse,
+  TestCaseSummaryResponse,
   TestCaseUploadStatusResponse,
   UploadImageRequest,
   UploadImageResponse,
@@ -51,8 +53,12 @@ export const problemsApi = {
   rejudge: (id: number) =>
     api<{ queued: number }>(`/api/problems/${id}/rejudge`, { method: "POST" }),
 
+  // Sizes + head of the data only. Full cases run into the megabytes, so they
+  // are fetched one at a time with getTestCase when actually opened.
   listTestCases: (problemId: number) =>
-    api<TestCaseResponse[]>(`/api/problems/${problemId}/test-cases`),
+    api<TestCaseSummaryResponse[]>(`/api/problems/${problemId}/test-cases`),
+  getTestCase: (problemId: number, tcId: number) =>
+    api<TestCaseResponse>(`/api/problems/${problemId}/test-cases/${tcId}`),
   addTestCase: (problemId: number, body: TestCaseRequest) =>
     api<TestCaseResponse>(`/api/problems/${problemId}/test-cases`, {
       method: "POST",
@@ -61,6 +67,11 @@ export const problemsApi = {
   updateTestCase: (problemId: number, tcId: number, body: TestCaseRequest) =>
     api<TestCaseResponse>(`/api/problems/${problemId}/test-cases/${tcId}`, {
       method: "PUT",
+      body,
+    }),
+  updateTestCaseMeta: (problemId: number, tcId: number, body: TestCaseMetaRequest) =>
+    api<void>(`/api/problems/${problemId}/test-cases/${tcId}/meta`, {
+      method: "PATCH",
       body,
     }),
   appendTestCaseChunk: (

@@ -3,8 +3,10 @@ package dev.algoj.domain.problem.controller;
 import dev.algoj.domain.problem.dto.AppendTestCaseChunkRequest;
 import dev.algoj.domain.problem.dto.GenerateTestCaseRequest;
 import dev.algoj.domain.problem.dto.GenerateTestCaseResponse;
+import dev.algoj.domain.problem.dto.TestCaseMetaRequest;
 import dev.algoj.domain.problem.dto.TestCaseRequest;
 import dev.algoj.domain.problem.dto.TestCaseResponse;
+import dev.algoj.domain.problem.dto.TestCaseSummaryResponse;
 import dev.algoj.domain.problem.dto.TestCaseUploadStatusResponse;
 import dev.algoj.domain.problem.service.TestCaseGeneratorService;
 import dev.algoj.domain.problem.service.TestCaseService;
@@ -42,9 +44,18 @@ public class TestCaseController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    // Summaries only (lengths + head of the data). Fetch one case in full via
+    // GET /{testCaseId} when it actually has to be shown or edited.
     @GetMapping
-    public ResponseEntity<List<TestCaseResponse>> listAll(@PathVariable Long problemId) {
-        return ResponseEntity.ok(testCaseService.listAll(problemId));
+    public ResponseEntity<List<TestCaseSummaryResponse>> listAll(@PathVariable Long problemId) {
+        return ResponseEntity.ok(testCaseService.listSummaries(problemId));
+    }
+
+    @GetMapping("/{testCaseId}")
+    public ResponseEntity<TestCaseResponse> get(
+            @PathVariable Long problemId,
+            @PathVariable Long testCaseId) {
+        return ResponseEntity.ok(testCaseService.get(problemId, testCaseId));
     }
 
     // Chunked upload for test cases whose data exceeds the proxy body limit:
@@ -70,6 +81,16 @@ public class TestCaseController {
             @PathVariable Long testCaseId,
             @Valid @RequestBody TestCaseRequest request) {
         return ResponseEntity.ok(testCaseService.update(problemId, testCaseId, request));
+    }
+
+    // Flags only, so reordering a multi-MB case doesn't re-upload it.
+    @PatchMapping("/{testCaseId}/meta")
+    public ResponseEntity<Void> updateMeta(
+            @PathVariable Long problemId,
+            @PathVariable Long testCaseId,
+            @Valid @RequestBody TestCaseMetaRequest request) {
+        testCaseService.updateMeta(problemId, testCaseId, request);
+        return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{testCaseId}")

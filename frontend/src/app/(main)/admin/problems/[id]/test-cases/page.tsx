@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { ApiError } from "@/lib/api";
 import { problemsApi } from "@/lib/problems-api";
 import { useAuthStore } from "@/lib/auth-store";
+import { downloadTextFile } from "@/lib/download";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeEditor } from "@/components/code-editor";
@@ -19,8 +20,9 @@ import type {
   GenerateTestCaseRequest,
   GenerateTestCaseResponse,
   Language,
+  TestCaseMetaRequest,
   TestCaseRequest,
-  TestCaseResponse,
+  TestCaseSummaryResponse,
 } from "@/types/api";
 
 const LANGUAGES: { value: Language; label: string }[] = [
@@ -32,22 +34,75 @@ const LANGUAGES: { value: Language; label: string }[] = [
   { value: "JAVASCRIPT", label: "JavaScript" },
 ];
 
+const numberFormat = new Intl.NumberFormat("ko");
+const chars = (n: number) => `${numberFormat.format(n)}자`;
+
+// Opening a case this big in a textarea is what drags the browser down, so it
+// only happens on an explicit click (with a confirm past this size).
+const HEAVY_CHARS = 200_000;
+// A save carries the whole case in one request; nginx caps bodies at 1MB.
+const MAX_SAVE_CHARS = 700_000;
+
 interface DraftTC {
   id?: number;
-  input: string;
-  expectedOutput: string;
   orderIndex: number;
   isSample: boolean;
+  isDraft: boolean;
+  // Real sizes on the server — the list endpoint never sends the data itself.
+  inputLength: number;
+  expectedOutputLength: number;
+  inputPreview: string;
+  expectedOutputPreview: string;
+  // Full data, filled in once the case is opened (or straight away when the
+  // preview already covers the whole thing).
+  input: string;
+  expectedOutput: string;
+  loaded: boolean;
+  // Data edited — needs a full save. Only ever set on an opened case.
   dirty: boolean;
+  // Order/sample edited — saved through the flags-only endpoint, so a case that
+  // was never opened can be reordered without its data being touched.
+  metaDirty: boolean;
 }
 
-const fromServer = (tc: TestCaseResponse): DraftTC => ({
-  id: tc.id,
-  input: tc.input,
-  expectedOutput: tc.expectedOutput,
-  orderIndex: tc.orderIndex,
-  isSample: tc.isSample,
-  dirty: false,
+const isTruncated = (d: DraftTC) =>
+  d.inputLength > d.inputPreview.length ||
+  d.expectedOutputLength > d.expectedOutputPreview.length;
+
+const fromServer = (s: TestCaseSummaryResponse): DraftTC => {
+  const whole =
+    s.inputLength <= s.inputPreview.length &&
+    s.expectedOutputLength <= s.expectedOutputPreview.length;
+  return {
+    id: s.id,
+    orderIndex: s.orderIndex,
+    isSample: s.isSample,
+    isDraft: s.isDraft,
+    inputLength: s.inputLength,
+    expectedOutputLength: s.expectedOutputLength,
+    inputPreview: s.inputPreview,
+    expectedOutputPreview: s.expectedOutputPreview,
+    input: whole ? s.inputPreview : "",
+    expectedOutput: whole ? s.expectedOutputPreview : "",
+    loaded: whole,
+    dirty: false,
+    metaDirty: false,
+  };
+};
+
+const emptyDraft = (orderIndex: number): DraftTC => ({
+  orderIndex,
+  isSample: false,
+  isDraft: false,
+  inputLength: 0,
+  expectedOutputLength: 0,
+  inputPreview: "",
+  expectedOutputPreview: "",
+  input: "",
+  expectedOutput: "",
+  loaded: true,
+  dirty: true,
+  metaDirty: false,
 });
 
 export default function TestCaseManagementPage() {
@@ -58,6 +113,8 @@ export default function TestCaseManagementPage() {
   const qc = useQueryClient();
 
   const [drafts, setDrafts] = useState<DraftTC[]>([]);
+  // Case currently being pulled in full (id), for the button's spinner state.
+  const [openingId, setOpeningId] = useState<number | null>(null);
 
   // ── Generator panel state ──────────────────────────────────
   const [genLang, setGenLang] = useState<Language>("PYTHON3");
@@ -92,10 +149,36 @@ export default function TestCaseManagementPage() {
     enabled: !Number.isNaN(problemId) && user?.role === "ADMIN",
   });
 
+  // A refetch (after save/generate/delete) must not throw away data the admin
+  // already opened, nor unsaved edits — merge the new sizes onto what's here.
   useEffect(() => {
-    if (tcs.data) {
-      setDrafts(tcs.data.map(fromServer));
-    }
+    if (!tcs.data) return;
+    const fresh = tcs.data;
+    setDrafts((prev) => {
+      const byId = new Map(
+        prev.filter((d) => d.id !== undefined).map((d) => [d.id!, d]),
+      );
+      const merged = fresh.map((summary) => {
+        const next = fromServer(summary);
+        const old = byId.get(summary.id);
+        if (!old) return next;
+        if (old.dirty || old.metaDirty) return old;
+        const sameSize =
+          old.inputLength === next.inputLength &&
+          old.expectedOutputLength === next.expectedOutputLength;
+        if (old.loaded && !next.loaded && sameSize) {
+          return {
+            ...next,
+            input: old.input,
+            expectedOutput: old.expectedOutput,
+            loaded: true,
+          };
+        }
+        return next;
+      });
+      // Locally added rows that were never saved stay at the end.
+      return [...merged, ...prev.filter((d) => d.id === undefined)];
+    });
   }, [tcs.data]);
 
   const handleApiError = (err: unknown, fallback: string) => {
@@ -121,6 +204,16 @@ export default function TestCaseManagementPage() {
       qc.invalidateQueries({ queryKey: ["problem", problemId] });
     },
     onError: (err) => handleApiError(err, "수정 실패"),
+  });
+
+  const metaMutation = useMutation({
+    mutationFn: ({ tcId, body }: { tcId: number; body: TestCaseMetaRequest }) =>
+      problemsApi.updateTestCaseMeta(problemId, tcId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["test-cases", problemId] });
+      qc.invalidateQueries({ queryKey: ["problem", problemId] });
+    },
+    onError: (err) => handleApiError(err, "순서/샘플 저장 실패"),
   });
 
   const deleteMutation = useMutation({
@@ -173,11 +266,8 @@ export default function TestCaseManagementPage() {
     });
   };
 
-  const setField = <K extends keyof DraftTC>(
-    idx: number,
-    key: K,
-    value: DraftTC[K],
-  ) => {
+  // Data edits — only reachable on an opened case.
+  const setData = (idx: number, key: "input" | "expectedOutput", value: string) => {
     setDrafts((prev) => {
       const next = [...prev];
       next[idx] = { ...next[idx], [key]: value, dirty: true };
@@ -185,17 +275,89 @@ export default function TestCaseManagementPage() {
     });
   };
 
+  // Flag edits — allowed on unopened cases too; saved without their data.
+  const setMeta = <K extends "orderIndex" | "isSample">(
+    idx: number,
+    key: K,
+    value: DraftTC[K],
+  ) => {
+    setDrafts((prev) => {
+      const next = [...prev];
+      const d = next[idx];
+      // A brand-new row is saved whole anyway, so keep it on the data path.
+      next[idx] = { ...d, [key]: value, metaDirty: d.id !== undefined };
+      if (d.id === undefined) next[idx].dirty = true;
+      return next;
+    });
+  };
+
   const addLocal = () => {
-    setDrafts((prev) => [
-      ...prev,
-      {
-        input: "",
-        expectedOutput: "",
-        orderIndex: prev.length,
-        isSample: false,
-        dirty: true,
-      },
-    ]);
+    setDrafts((prev) => [...prev, emptyDraft(prev.length)]);
+  };
+
+  /** Pulls one case's full data down — the only thing that renders a big TC. */
+  const openFull = async (idx: number) => {
+    const d = drafts[idx];
+    if (d.id === undefined || d.loaded) return;
+    const total = d.inputLength + d.expectedOutputLength;
+    if (
+      total > HEAVY_CHARS &&
+      !confirm(
+        `이 케이스는 ${chars(total)}입니다. 편집기에 펼치면 브라우저가 느려질 수 있습니다.\n` +
+          `내용만 확인하려면 '.txt로 저장'을 쓰세요. 계속 펼칠까요?`,
+      )
+    ) {
+      return;
+    }
+    setOpeningId(d.id);
+    try {
+      const full = await problemsApi.getTestCase(problemId, d.id);
+      setDrafts((prev) =>
+        prev.map((x) =>
+          x.id === full.id
+            ? {
+                ...x,
+                input: full.input,
+                expectedOutput: full.expectedOutput,
+                loaded: true,
+              }
+            : x,
+        ),
+      );
+    } catch (err) {
+      handleApiError(err, "불러오기 실패");
+    } finally {
+      setOpeningId(null);
+    }
+  };
+
+  /** Drops the opened data again so the page stops carrying it. */
+  const collapse = (idx: number) => {
+    setDrafts((prev) =>
+      prev.map((x, i) =>
+        i === idx && !x.dirty
+          ? { ...x, input: "", expectedOutput: "", loaded: false }
+          : x,
+      ),
+    );
+  };
+
+  // Saves the data to a file without ever putting it in the DOM.
+  const downloadPart = async (idx: number, part: "input" | "output") => {
+    const d = drafts[idx];
+    if (d.id === undefined) return;
+    setOpeningId(d.id);
+    try {
+      const full = d.loaded ? d : await problemsApi.getTestCase(problemId, d.id);
+      downloadTextFile(
+        `problem-${problemId}-tc${idx + 1}-${part === "input" ? "in" : "out"}.txt`,
+        part === "input" ? full.input : full.expectedOutput,
+      );
+    } catch (err) {
+      handleApiError(err, "다운로드 실패");
+    } finally {
+      setOpeningId(null);
+    }
   };
 
   const removeLocal = (idx: number) => {
@@ -203,6 +365,19 @@ export default function TestCaseManagementPage() {
   };
 
   const saveOne = async (draft: DraftTC) => {
+    // Flags-only change on an existing case: never send the data back.
+    if (draft.id !== undefined && !draft.dirty) {
+      await metaMutation.mutateAsync({
+        tcId: draft.id,
+        body: { orderIndex: draft.orderIndex, isSample: draft.isSample },
+      });
+      return;
+    }
+    if (draft.input.length + draft.expectedOutput.length > MAX_SAVE_CHARS) {
+      throw new Error(
+        `케이스가 ${chars(MAX_SAVE_CHARS)}를 넘어 한 번에 저장할 수 없습니다 — 생성기로 다시 만들어 주세요`,
+      );
+    }
     const body: TestCaseRequest = {
       input: draft.input,
       expectedOutput: draft.expectedOutput,
@@ -229,7 +404,7 @@ export default function TestCaseManagementPage() {
   };
 
   const handleSaveAll = async () => {
-    const dirty = drafts.filter((d) => d.dirty);
+    const dirty = drafts.filter((d) => d.dirty || d.metaDirty);
     if (dirty.length === 0) {
       toast.info("변경사항이 없습니다");
       return;
@@ -239,8 +414,11 @@ export default function TestCaseManagementPage() {
         await saveOne(d);
       }
       toast.success(`저장 완료 — ${dirty.length}건`);
-    } catch {
-      // mutation onError already shows toast
+    } catch (err) {
+      // Mutation failures already showed a toast; size rejections did not.
+      if (!(err instanceof ApiError) && err instanceof Error) {
+        toast.error(err.message);
+      }
     }
   };
 
@@ -262,10 +440,11 @@ export default function TestCaseManagementPage() {
     );
   }
 
-  const dirtyCount = drafts.filter((d) => d.dirty).length;
+  const dirtyCount = drafts.filter((d) => d.dirty || d.metaDirty).length;
   const busy =
     addMutation.isPending ||
     updateMutation.isPending ||
+    metaMutation.isPending ||
     deleteMutation.isPending;
 
   return (
@@ -471,16 +650,27 @@ export default function TestCaseManagementPage() {
         {drafts.map((d, idx) => (
           <Card
             key={d.id ?? `new-${idx}`}
-            className={d.dirty ? "border-amber-500" : ""}
+            className={d.dirty || d.metaDirty ? "border-amber-500" : ""}
           >
             <CardHeader className="flex-row items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
+              <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                 TC #{idx + 1}
                 {d.id === undefined && (
                   <span className="text-xs text-muted-foreground">(신규)</span>
                 )}
-                {d.dirty && (
+                {d.isDraft && (
+                  <span className="text-xs text-amber-600">
+                    ● 업로드 미완료 (채점 제외)
+                  </span>
+                )}
+                {(d.dirty || d.metaDirty) && (
                   <span className="text-xs text-amber-600">● 미저장</span>
+                )}
+                {d.id !== undefined && (
+                  <span className="text-xs font-normal text-muted-foreground">
+                    입력 {chars(d.inputLength)} · 출력{" "}
+                    {chars(d.expectedOutputLength)}
+                  </span>
                 )}
               </CardTitle>
               <div className="flex items-center gap-3">
@@ -488,7 +678,7 @@ export default function TestCaseManagementPage() {
                   <input
                     type="checkbox"
                     checked={d.isSample}
-                    onChange={(e) => setField(idx, "isSample", e.target.checked)}
+                    onChange={(e) => setMeta(idx, "isSample", e.target.checked)}
                     className="size-4 rounded border-input"
                   />
                   샘플
@@ -505,33 +695,102 @@ export default function TestCaseManagementPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label className="text-xs">입력</Label>
-                  <Textarea
-                    rows={5}
-                    value={d.input}
-                    onChange={(e) => setField(idx, "input", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">예상 출력</Label>
-                  <Textarea
-                    rows={5}
-                    value={d.expectedOutput}
-                    onChange={(e) =>
-                      setField(idx, "expectedOutput", e.target.value)
-                    }
-                  />
-                </div>
-              </div>
+              {d.loaded ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">입력</Label>
+                      <Textarea
+                        rows={5}
+                        value={d.input}
+                        onChange={(e) => setData(idx, "input", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">예상 출력</Label>
+                      <Textarea
+                        rows={5}
+                        value={d.expectedOutput}
+                        onChange={(e) =>
+                          setData(idx, "expectedOutput", e.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                  {isTruncated(d) && !d.dirty && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => collapse(idx)}
+                    >
+                      접기 (페이지에서 내려놓기)
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">
+                        입력 — 앞 {chars(d.inputPreview.length)}만 표시
+                      </Label>
+                      <pre className="bg-muted rounded p-2 text-xs h-32 overflow-auto whitespace-pre-wrap break-all">
+                        {d.inputPreview}
+                      </pre>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs">
+                        예상 출력 — 앞{" "}
+                        {chars(d.expectedOutputPreview.length)}만 표시
+                      </Label>
+                      <pre className="bg-muted rounded p-2 text-xs h-32 overflow-auto whitespace-pre-wrap break-all">
+                        {d.expectedOutputPreview}
+                      </pre>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={openingId !== null}
+                      onClick={() => openFull(idx)}
+                    >
+                      {openingId === d.id ? "불러오는 중..." : "전체 펼쳐서 편집"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={openingId !== null}
+                      onClick={() => downloadPart(idx, "input")}
+                    >
+                      입력 .txt로 저장
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={openingId !== null}
+                      onClick={() => downloadPart(idx, "output")}
+                    >
+                      출력 .txt로 저장
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      큰 케이스는 펼치는 순간 브라우저가 느려집니다 — 확인만
+                      하려면 .txt로 저장하세요
+                    </span>
+                  </div>
+                </>
+              )}
               <div className="space-y-2 max-w-32">
                 <Label className="text-xs">순서</Label>
                 <Input
                   type="number"
                   value={d.orderIndex}
                   onChange={(e) =>
-                    setField(idx, "orderIndex", Number(e.target.value))
+                    setMeta(idx, "orderIndex", Number(e.target.value))
                   }
                 />
               </div>
