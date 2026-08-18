@@ -71,6 +71,22 @@ export interface TestCaseResponse {
   isDraft: boolean;
 }
 
+/**
+ * Test case without its data — the admin list endpoint returns these. Previews
+ * hold the first characters only; `inputLength`/`expectedOutputLength` are the
+ * real sizes, so `inputLength > inputPreview.length` means "truncated".
+ */
+export interface TestCaseSummaryResponse {
+  id: number;
+  orderIndex: number;
+  isSample: boolean;
+  isDraft: boolean;
+  inputLength: number;
+  expectedOutputLength: number;
+  inputPreview: string;
+  expectedOutputPreview: string;
+}
+
 export type SolvedFilter = "ALL" | "SOLVED" | "ATTEMPTED" | "UNSOLVED";
 
 export interface ProblemListParams {
@@ -120,6 +136,12 @@ export interface TestCaseRequest {
   // Create as a draft so data can be appended in <1MB chunks; drafts are
   // excluded from judging until finalized.
   draft?: boolean;
+}
+
+// Order/sample only — used to re-flag a case without re-uploading its data.
+export interface TestCaseMetaRequest {
+  orderIndex: number;
+  isSample: boolean;
 }
 
 export interface AppendTestCaseChunkRequest {
