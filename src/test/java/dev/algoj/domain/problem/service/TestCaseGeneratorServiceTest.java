@@ -8,6 +8,7 @@ import dev.algoj.domain.problem.repository.ProblemRepository;
 import dev.algoj.domain.problem.repository.TestCaseRepository;
 import dev.algoj.domain.submission.entity.Submission.Language;
 import dev.algoj.global.client.Judge0Client;
+import dev.algoj.global.client.dto.Judge0SubmissionRequest;
 import dev.algoj.global.client.dto.Judge0SubmissionResponse;
 import dev.algoj.global.exception.BusinessException;
 import dev.algoj.global.exception.ErrorCode;
@@ -128,6 +129,29 @@ class TestCaseGeneratorServiceTest {
     }
 
     // ── helpers ──────────────────────────────────────────────
+
+    @Test
+    void generate_withJavaSolution_sendsItAsClassMain() {
+        // Judge0 compiles Java as Main.java, so a pasted Solution.java would not
+        // even compile; the setter should not have to rename the class by hand.
+        when(judge0Client.submitAndWait(any()))
+                .thenReturn(okResponse("5\n"))
+                .thenReturn(okResponse("15\n"));
+        when(testCaseRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.generate(1L, new GenerateTestCaseRequest(
+                Language.PYTHON3, "print(5)", null,
+                Language.JAVA, "public class Solution { public static void main(String[] a) { } }",
+                null, null,
+                0, false));
+
+        ArgumentCaptor<Judge0SubmissionRequest> sent =
+                ArgumentCaptor.forClass(Judge0SubmissionRequest.class);
+        verify(judge0Client, times(2)).submitAndWait(sent.capture());
+        assertThat(sent.getAllValues().get(1).sourceCode()).contains("public class Main {");
+        // Non-Java code goes out untouched.
+        assertThat(sent.getAllValues().get(0).sourceCode()).isEqualTo("print(5)");
+    }
 
     private GenerateTestCaseRequest request() {
         return new GenerateTestCaseRequest(

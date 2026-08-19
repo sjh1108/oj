@@ -12,6 +12,7 @@ import dev.algoj.global.client.dto.Judge0SubmissionResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -185,6 +186,38 @@ class JudgeServiceSubtaskTest {
         verify(judge0Client, times(1)).submitAndWait(any(Judge0SubmissionRequest.class), any());
         assertThat(s.getStatus()).isEqualTo(Submission.Status.ACCEPTED);
         assertThat(s.getPassedTestCases()).isEqualTo(1);
+    }
+
+    @Test
+    void javaSubmission_isSentToJudge0AsClassMain_withoutTouchingTheStoredSource() {
+        Problem problem = Problem.builder()
+                .title("p").description("d")
+                .timeLimit(1000).memoryLimit(256000)
+                .difficulty(Problem.Difficulty.BRONZE)
+                .isPublic(true)
+                .build();
+        problem.addTestCase(TestCase.builder().input("1").expectedOutput("1").orderIndex(0).isSample(true).build());
+
+        String pasted = "public class Solution { public static void main(String[] a) { } }";
+        Submission s = Submission.builder()
+                .problem(problem)
+                .sourceCode(pasted)
+                .language(Submission.Language.JAVA)
+                .status(Submission.Status.PENDING)
+                .totalTestCases(1)
+                .build();
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
+        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class), any()))
+                .thenReturn(judge0(AC));
+
+        service.judge(1L);
+
+        ArgumentCaptor<Judge0SubmissionRequest> sent =
+                ArgumentCaptor.forClass(Judge0SubmissionRequest.class);
+        verify(judge0Client).submitAndWait(sent.capture(), any());
+        assertThat(sent.getValue().sourceCode()).contains("public class Main {");
+        // What the user typed stays what the user sees on the submission page.
+        assertThat(s.getSourceCode()).isEqualTo(pasted);
     }
 
     @Test

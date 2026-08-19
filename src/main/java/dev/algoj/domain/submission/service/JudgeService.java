@@ -7,6 +7,7 @@ import dev.algoj.domain.problem.entity.TestCase;
 import dev.algoj.domain.submission.dto.SubtaskResultDto;
 import dev.algoj.domain.submission.entity.Submission;
 import dev.algoj.domain.submission.repository.SubmissionRepository;
+import dev.algoj.global.client.JavaSourceNormalizer;
 import dev.algoj.global.client.Judge0Client;
 import dev.algoj.global.client.Judge0Results;
 import dev.algoj.global.client.Judge0StatusMapper;
@@ -82,8 +83,12 @@ public class JudgeService {
         Submission s = submissionRepository.findById(submissionId).orElse(null);
         if (s == null) return null;
         Problem problem = s.getProblem();
+        // Normalized once here, not per test case: the loop below reuses this source.
+        String sourceCode = s.getLanguage() == Submission.Language.JAVA
+                ? JavaSourceNormalizer.toMainClass(s.getSourceCode())
+                : s.getSourceCode();
         return new JudgePlan(
-                s.getSourceCode(),
+                sourceCode,
                 s.getLanguage().getJudge0Id(),
                 problem.getTimeLimit(),
                 problem.getMemoryLimit(),
