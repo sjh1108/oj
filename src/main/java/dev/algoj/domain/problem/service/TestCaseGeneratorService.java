@@ -7,6 +7,7 @@ import dev.algoj.domain.problem.entity.TestCase;
 import dev.algoj.domain.problem.repository.ProblemRepository;
 import dev.algoj.domain.problem.repository.TestCaseRepository;
 import dev.algoj.domain.submission.entity.Submission.Language;
+import dev.algoj.global.client.JavaSourceNormalizer;
 import dev.algoj.global.client.Judge0Client;
 import dev.algoj.global.client.Judge0Results;
 import dev.algoj.global.client.dto.Judge0SubmissionRequest;
@@ -102,8 +103,13 @@ public class TestCaseGeneratorService {
     }
 
     private Judge0SubmissionResponse runViaJudge0(String sourceCode, Language language, String stdin, String expectedOutput) {
+        // Generator, model solution and validator all pass through here, so pasted
+        // Solution.java files run without the setter renaming the class by hand.
+        String prepared = language == Language.JAVA
+                ? JavaSourceNormalizer.toMainClass(sourceCode)
+                : sourceCode;
         Judge0SubmissionRequest req = Judge0SubmissionRequest.of(
-                sourceCode,
+                prepared,
                 language.getJudge0Id(),
                 stdin,
                 expectedOutput,
