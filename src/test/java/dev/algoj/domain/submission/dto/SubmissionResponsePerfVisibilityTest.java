@@ -39,7 +39,7 @@ class SubmissionResponsePerfVisibilityTest {
         Submission s = submissionWith(Submission.Status.JUDGING);
         // 1 of 2 cases passed → 50%
         assertThat(SubmissionResponse.from(s).progress()).isEqualTo(50);
-        assertThat(SubmissionDetailResponse.from(s).progress()).isEqualTo(50);
+        assertThat(SubmissionDetailResponse.from(s, true).progress()).isEqualTo(50);
     }
 
     @Test
@@ -53,8 +53,8 @@ class SubmissionResponsePerfVisibilityTest {
         Submission s = submissionWith(Submission.Status.ACCEPTED);
         assertThat(SubmissionResponse.from(s).runtime()).isEqualTo(120);
         assertThat(SubmissionResponse.from(s).memory()).isEqualTo(4096);
-        assertThat(SubmissionDetailResponse.from(s).runtime()).isEqualTo(120);
-        assertThat(SubmissionDetailResponse.from(s).memory()).isEqualTo(4096);
+        assertThat(SubmissionDetailResponse.from(s, true).runtime()).isEqualTo(120);
+        assertThat(SubmissionDetailResponse.from(s, true).memory()).isEqualTo(4096);
     }
 
     @Test
@@ -69,8 +69,8 @@ class SubmissionResponsePerfVisibilityTest {
             Submission s = submissionWith(st);
             assertThat(SubmissionResponse.from(s).runtime()).as("runtime for %s", st).isNull();
             assertThat(SubmissionResponse.from(s).memory()).as("memory for %s", st).isNull();
-            assertThat(SubmissionDetailResponse.from(s).runtime()).as("detail runtime for %s", st).isNull();
-            assertThat(SubmissionDetailResponse.from(s).memory()).as("detail memory for %s", st).isNull();
+            assertThat(SubmissionDetailResponse.from(s, true).runtime()).as("detail runtime for %s", st).isNull();
+            assertThat(SubmissionDetailResponse.from(s, true).memory()).as("detail memory for %s", st).isNull();
         }
     }
 }

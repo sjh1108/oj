@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.algoj.domain.problem.entity.Problem;
 import dev.algoj.domain.problem.entity.Subtask;
 import dev.algoj.domain.problem.entity.TestCase;
+import dev.algoj.domain.problem.service.ProblemNoteService;
 import dev.algoj.domain.submission.entity.Submission;
 import dev.algoj.domain.submission.repository.SubmissionRepository;
+import dev.algoj.domain.user.entity.User;
 import dev.algoj.global.client.Judge0Client;
 import dev.algoj.global.client.dto.Judge0SubmissionRequest;
 import dev.algoj.global.client.dto.Judge0SubmissionResponse;
@@ -25,6 +27,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -36,6 +39,8 @@ class JudgeServiceSubtaskTest {
     SubmissionRepository submissionRepository;
     @Mock
     Judge0Client judge0Client;
+    @Mock
+    ProblemNoteService problemNoteService;
 
     JudgeService service;
 
@@ -57,7 +62,8 @@ class JudgeServiceSubtaskTest {
             public void rollback(TransactionStatus status) {
             }
         });
-        service = new JudgeService(submissionRepository, judge0Client, new ObjectMapper(), tx);
+        service = new JudgeService(
+                submissionRepository, problemNoteService, judge0Client, new ObjectMapper(), tx);
     }
 
     private static final int AC = 3;   // Judge0 "Accepted"
@@ -71,6 +77,55 @@ class JudgeServiceSubtaskTest {
         return new Judge0SubmissionResponse(
                 "out", null, compileOutput, null, "0.01", 1000, "tok",
                 new Judge0SubmissionResponse.Status(statusId, "desc"));
+    }
+
+    // 메모 스냅샷은 정답일 때만 붙는다 — 오답 로그에 남기면 다음 시도에서 본인이
+    // 이미 적어둔 것을 제출 목록에서 다시 보게 되고, 기록의 뜻도 흐려진다.
+    @Test
+    void acceptedSubmission_carriesNoteSnapshot() {
+        Submission s = submissionFor(problemWithTwoSubtasks(), 3);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
+        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class), any()))
+                .thenReturn(judge0(AC));
+        when(problemNoteService.snapshotFor(any(), any()))
+                .thenReturn(new ProblemNoteService.NoteSnapshot("정답 당시 메모", true));
+
+        service.judge(1L);
+
+        assertThat(s.getStatus()).isEqualTo(Submission.Status.ACCEPTED);
+        assertThat(s.getNoteSnapshot()).isEqualTo("정답 당시 메모");
+        // 공개 여부는 정답 시점의 선택을 그대로 박아둔다 — 이후 메모 설정을 바꿔도
+        // 이 제출에 붙은 사본의 공개 여부는 움직이지 않는다.
+        assertThat(s.getNoteSnapshotPublic()).isTrue();
+    }
+
+    @Test
+    void acceptedSubmission_withPrivateNote_keepsSnapshotPrivate() {
+        Submission s = submissionFor(problemWithTwoSubtasks(), 3);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
+        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class), any()))
+                .thenReturn(judge0(AC));
+        when(problemNoteService.snapshotFor(any(), any()))
+                .thenReturn(new ProblemNoteService.NoteSnapshot("비공개 메모", false));
+
+        service.judge(1L);
+
+        assertThat(s.getNoteSnapshot()).isEqualTo("비공개 메모");
+        assertThat(s.getNoteSnapshotPublic()).isFalse();
+    }
+
+    @Test
+    void partialSubmission_carriesNoNoteSnapshot() {
+        Submission s = submissionFor(problemWithTwoSubtasks(), 3);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
+        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class), any()))
+                .thenReturn(judge0(AC), judge0(WA));
+
+        service.judge(1L);
+
+        assertThat(s.getStatus()).isEqualTo(Submission.Status.PARTIAL);
+        assertThat(s.getNoteSnapshot()).isNull();
+        verify(problemNoteService, never()).snapshotFor(any(), any());
     }
 
     private Problem problemWithTwoSubtasks() {
@@ -95,6 +150,9 @@ class JudgeServiceSubtaskTest {
 
     private Submission submissionFor(Problem problem, int totalTcs) {
         return Submission.builder()
+                .user(User.builder()
+                        .username("tester").email("t@example.com")
+                        .password("HASH").role(User.Role.USER).build())
                 .problem(problem)
                 .sourceCode("code")
                 .language(Submission.Language.PYTHON3)
