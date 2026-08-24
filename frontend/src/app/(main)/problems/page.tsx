@@ -177,7 +177,7 @@ export default function ProblemsPage() {
                 <span className="text-muted-foreground text-sm w-10 shrink-0">
                   #{p.id}
                 </span>
-                <span className="font-medium truncate">{p.title}</span>
+                <span className="font-medium truncate min-w-32">{p.title}</span>
                 {!p.isPublic && (
                   <span className="text-xs text-muted-foreground shrink-0">
                     (비공개)
@@ -185,16 +185,19 @@ export default function ProblemsPage() {
                 )}
                 {/* 태그는 풀이 방향을 알려주는 스포일러라 기본은 감춘다.
                     보기를 켠 사람에게만 노출한다(위의 "태그 보기" 토글). */}
-                {preferences.showTags &&
-                  p.tags.map((t) => (
-                    <Badge
-                      key={t}
-                      variant="outline"
-                      className="hidden sm:inline-flex shrink-0 text-muted-foreground"
-                    >
-                      {t}
-                    </Badge>
-                  ))}
+                {preferences.showTags && p.tags.length > 0 && (
+                  <div className="hidden min-w-0 gap-3 overflow-hidden sm:flex">
+                    {p.tags.map((t) => (
+                      <Badge
+                        key={t}
+                        variant="outline"
+                        className="shrink-0 text-muted-foreground"
+                      >
+                        {t}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 {p.authorUsername && (

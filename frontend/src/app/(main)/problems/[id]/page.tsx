@@ -359,22 +359,26 @@ export default function ProblemDetailPage() {
   const statementSection = (
         <section className="space-y-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold">
-                #{p.id} {p.title}
-              </h1>
-              <DifficultyBadge difficulty={p.difficulty} />
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+              <div className="flex min-w-0 items-center gap-3">
+                <h1 className="text-2xl font-semibold break-keep">
+                  #{p.id} {p.title}
+                </h1>
+                <DifficultyBadge difficulty={p.difficulty} />
+              </div>
               {p.tags.length > 0 &&
                 (tagsVisible ? (
-                  p.tags.map((t) => (
-                    <Badge
-                      key={t}
-                      variant="outline"
-                      className="text-muted-foreground"
-                    >
-                      {t}
-                    </Badge>
-                  ))
+                  <div className="flex flex-wrap items-center gap-2">
+                    {p.tags.map((t) => (
+                      <Badge
+                        key={t}
+                        variant="outline"
+                        className="text-muted-foreground"
+                      >
+                        {t}
+                      </Badge>
+                    ))}
+                  </div>
                 ) : (
                   <Button
                     type="button"
