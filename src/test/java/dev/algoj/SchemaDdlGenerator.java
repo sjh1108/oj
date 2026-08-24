@@ -1,6 +1,7 @@
 package dev.algoj;
 
 import dev.algoj.domain.problem.entity.Problem;
+import dev.algoj.domain.problem.entity.ProblemNote;
 import dev.algoj.domain.problem.entity.Subtask;
 import dev.algoj.domain.problem.entity.TestCase;
 import dev.algoj.domain.submission.entity.Submission;
@@ -38,6 +39,7 @@ class SchemaDdlGenerator {
                 .addAnnotatedClass(User.class)
                 .addAnnotatedClass(UserPreferences.class)
                 .addAnnotatedClass(Problem.class)
+                .addAnnotatedClass(ProblemNote.class)
                 .addAnnotatedClass(TestCase.class)
                 .addAnnotatedClass(Subtask.class)
                 .addAnnotatedClass(Submission.class)

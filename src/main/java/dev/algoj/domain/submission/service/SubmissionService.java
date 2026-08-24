@@ -88,7 +88,7 @@ public class SubmissionService {
         if (!isOwner && !isAdmin && !canViewByAcceptance) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
-        return SubmissionDetailResponse.from(s);
+        return SubmissionDetailResponse.from(s, isOwner);
     }
 
     @Transactional(readOnly = true)

@@ -24,11 +24,15 @@ public record SubmissionDetailResponse(
         Boolean isPublic,
         String sourceCode,
         String errorMessage,
+        // 정답 처리 시점의 내 메모. 남의 제출을 볼 때는 항상 null이다 — 메모는
+        // 채점 결과가 아니라 개인 기록이라 공개 대상이 아니다.
+        String noteSnapshot,
         LocalDateTime createdAt
 ) {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    public static SubmissionDetailResponse from(Submission s) {
+    /** viewerIsOwner=false면 개인 메모를 뺀 응답이다. */
+    public static SubmissionDetailResponse from(Submission s, boolean viewerIsOwner) {
         // BOJ-style: runtime/memory only for accepted runs (see SubmissionResponse).
         boolean showPerf = s.getStatus() == Submission.Status.ACCEPTED;
         return new SubmissionDetailResponse(
@@ -47,6 +51,7 @@ public record SubmissionDetailResponse(
                 s.getIsPublic(),
                 s.getSourceCode(),
                 s.getErrorMessage(),
+                viewerIsOwner ? s.getNoteSnapshot() : null,
                 s.getCreatedAt()
         );
     }

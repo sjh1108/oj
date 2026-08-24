@@ -231,6 +231,14 @@ export interface SubmissionDetailResponse extends SubmissionResponse {
   sourceCode: string;
   errorMessage: string | null;
   subtaskResults: SubtaskResult[];
+  // 정답 처리 시점의 내 메모. 남의 제출을 볼 때는 서버가 항상 null로 내려준다.
+  noteSnapshot: string | null;
+}
+
+// 문제별 개인 메모. 메모가 없으면 content가 null이다.
+export interface ProblemNoteResponse {
+  content: string | null;
+  updatedAt: string | null;
 }
 
 export interface VisibilityRequest {

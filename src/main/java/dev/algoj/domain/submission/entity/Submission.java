@@ -68,6 +68,12 @@ public class Submission {
     @Column(nullable = false)
     private Boolean isPublic;
 
+    // 정답 처리 시점의 문제 메모 사본. 메모는 계속 고쳐지지만 제출 로그는 그때의
+    // 기록이라 스냅샷으로 남긴다. 정답이 아니거나 메모가 없었으면 null이고,
+    // 본인 외에는 응답에 실리지 않는다(SubmissionDetailResponse).
+    @Column(columnDefinition = "TEXT")
+    private String noteSnapshot;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -127,6 +133,9 @@ public class Submission {
         this.score = null;
         this.maxScore = null;
         this.subtaskResultsJson = null;
+        // 재채점도 이 경로를 지나므로 이전 정답의 메모 스냅샷은 여기서 버려진다.
+        // 다시 정답이면 재채점 시점의 메모로 새로 붙는다.
+        this.noteSnapshot = null;
     }
 
     public void incrementPassed(Integer runtimeMs, Integer memoryKb) {
@@ -154,6 +163,11 @@ public class Submission {
         this.score = score;
         this.maxScore = maxScore;
         this.subtaskResultsJson = subtaskResultsJson;
+    }
+
+    /** 정답 처리와 함께 그 시점의 메모를 붙인다. 메모가 없으면 null이 그대로 남는다. */
+    public void attachNoteSnapshot(String noteSnapshot) {
+        this.noteSnapshot = noteSnapshot;
     }
 
     public void setVisibility(boolean isPublic) {

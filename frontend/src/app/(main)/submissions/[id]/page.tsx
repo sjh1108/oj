@@ -226,6 +226,24 @@ export default function SubmissionDetailPage() {
         </Card>
       )}
 
+      {/* 정답 처리 시점의 내 메모. 서버가 본인에게만 내려주므로 남의 제출에서는
+          비어 있다(SubmissionDetailResponse). */}
+      {s.noteSnapshot && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">이 문제를 풀 때 남긴 메모</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap overflow-auto max-h-64 font-sans">
+              {s.noteSnapshot}
+            </pre>
+            <p className="text-xs text-muted-foreground mt-2">
+              정답 처리된 시점의 사본입니다 — 이후 메모를 고쳐도 이 기록은 그대로 남습니다.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="text-base">소스 코드</CardTitle>

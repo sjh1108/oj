@@ -38,6 +38,7 @@ import {
 import { downloadTextFile, sanitizeFilename } from "@/lib/download";
 import { buildProblemMarkdown } from "@/lib/problem-file";
 import { CodeEditor } from "@/components/code-editor";
+import { MemoPanel } from "@/components/memo-panel";
 import {
   EDITOR_FONT_OPTIONS,
   clampFontSize,
@@ -1025,6 +1026,9 @@ export default function ProblemDetailPage() {
             fontFamily={view.editorFontFamily}
             wordWrap={view.wordWrap}
           />
+          {/* 문제별 개인 메모 — 코드와 같은 시야에 두되 기본은 접혀 있다.
+              지문을 접은 집중 모드에서도 에디터와 함께 따라온다. */}
+          <MemoPanel problemId={p.id} />
         </section>
   );
 

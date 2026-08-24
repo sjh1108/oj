@@ -3,6 +3,7 @@ package dev.algoj.domain.submission.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.algoj.domain.problem.entity.Problem;
 import dev.algoj.domain.problem.entity.Subtask;
+import dev.algoj.domain.problem.service.ProblemNoteService;
 import dev.algoj.domain.problem.entity.TestCase;
 import dev.algoj.domain.submission.dto.SubtaskResultDto;
 import dev.algoj.domain.submission.entity.Submission;
@@ -47,6 +48,7 @@ public class JudgeService {
     private static final int JUDGE0_WAIT_MARGIN_MS = 15_000;
 
     private final SubmissionRepository submissionRepository;
+    private final ProblemNoteService problemNoteService;
     private final Judge0Client judge0Client;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
@@ -162,6 +164,12 @@ public class JudgeService {
         updateSubmission(submissionId, s -> {
             s.updateScore(score, maxScore, resultsJson);
             s.updateResult(status, null, null, message);
+            // 정답일 때만 그 시점의 문제 메모를 제출에 복사한다. 메모는 이후 계속
+            // 고쳐지지만 제출 로그는 "그때 어떻게 풀었나"의 기록이어야 한다.
+            if (status == Submission.Status.ACCEPTED) {
+                s.attachNoteSnapshot(problemNoteService.contentForSnapshot(
+                        s.getUser().getId(), s.getProblem().getId()));
+            }
         });
     }
 

@@ -8,6 +8,7 @@ import type {
   ProblemDetailResponse,
   ProblemListItem,
   ProblemListParams,
+  ProblemNoteResponse,
   TestCaseMetaRequest,
   TestCaseRequest,
   TestCaseResponse,
@@ -39,6 +40,16 @@ export const problemsApi = {
     return api<PageResponse<ProblemListItem>>(`/api/problems?${params}`);
   },
   tags: () => api<string[]>("/api/problems/tags"),
+
+  // 문제별 개인 메모 — 언제나 로그인한 본인 것만 오간다.
+  // 빈 내용으로 저장하면 서버가 행을 지운다(별도 삭제 API 없음).
+  getNote: (problemId: number) =>
+    api<ProblemNoteResponse>(`/api/problems/${problemId}/note`),
+  saveNote: (problemId: number, content: string) =>
+    api<ProblemNoteResponse>(`/api/problems/${problemId}/note`, {
+      method: "PUT",
+      body: { content },
+    }),
   detail: (id: number) =>
     api<ProblemDetailResponse>(`/api/problems/${id}`),
   create: (body: CreateProblemRequest) =>
