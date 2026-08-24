@@ -69,10 +69,15 @@ public class Submission {
     private Boolean isPublic;
 
     // 정답 처리 시점의 문제 메모 사본. 메모는 계속 고쳐지지만 제출 로그는 그때의
-    // 기록이라 스냅샷으로 남긴다. 정답이 아니거나 메모가 없었으면 null이고,
-    // 본인 외에는 응답에 실리지 않는다(SubmissionDetailResponse).
+    // 기록이라 스냅샷으로 남긴다. 정답이 아니거나 메모가 없었으면 null이다.
     @Column(columnDefinition = "TEXT")
     private String noteSnapshot;
+
+    // 그 시점에 메모가 공개 설정이었는지. 공개면 이 제출을 볼 수 있는 사람에게도
+    // 메모가 함께 보인다(SubmissionDetailResponse). 살아있는 메모의 설정을 나중에
+    // 참조하지 않는 이유는 소급 공개를 막기 위해서다.
+    @Column(nullable = false)
+    private Boolean noteSnapshotPublic;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
@@ -136,6 +141,7 @@ public class Submission {
         // 재채점도 이 경로를 지나므로 이전 정답의 메모 스냅샷은 여기서 버려진다.
         // 다시 정답이면 재채점 시점의 메모로 새로 붙는다.
         this.noteSnapshot = null;
+        this.noteSnapshotPublic = false;
     }
 
     public void incrementPassed(Integer runtimeMs, Integer memoryKb) {
@@ -165,9 +171,10 @@ public class Submission {
         this.subtaskResultsJson = subtaskResultsJson;
     }
 
-    /** 정답 처리와 함께 그 시점의 메모를 붙인다. 메모가 없으면 null이 그대로 남는다. */
-    public void attachNoteSnapshot(String noteSnapshot) {
+    /** 정답 처리와 함께 그 시점의 메모와 공개 여부를 붙인다. 메모가 없으면 그대로 둔다. */
+    public void attachNoteSnapshot(String noteSnapshot, boolean isPublic) {
         this.noteSnapshot = noteSnapshot;
+        this.noteSnapshotPublic = isPublic;
     }
 
     public void setVisibility(boolean isPublic) {
@@ -192,5 +199,6 @@ public class Submission {
         if (this.passedTestCases == null) this.passedTestCases = 0;
         if (this.totalTestCases == null) this.totalTestCases = 0;
         if (this.isPublic == null) this.isPublic = true;
+        if (this.noteSnapshotPublic == null) this.noteSnapshotPublic = false;
     }
 }

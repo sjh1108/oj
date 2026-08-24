@@ -53,21 +53,29 @@ public class ProblemNoteService {
         }
 
         ProblemNote note = existing.orElseGet(
-                () -> ProblemNote.of(requireUser(userId), problem, content));
-        note.updateContent(content);
+                () -> ProblemNote.of(requireUser(userId), problem, content, request.publicOrDefault()));
+        note.update(content, request.publicOrDefault());
         return ProblemNoteResponse.from(noteRepository.save(note));
     }
 
     /**
-     * 제출이 정답 처리될 때 남길 메모 본문. 메모가 없으면 null.
-     * (스냅샷을 뜨는 쪽은 {@code JudgeService} — 여기서는 읽기만 한다.)
+     * 제출이 정답 처리될 때 찍을 메모 사본. 메모가 없으면 null.
+     *
+     * 공개 여부를 여기서 함께 넘기는 이유: 제출에 그때의 선택을 박아두지 않고 살아있는
+     * 메모의 설정을 나중에 참조하면, 메모를 공개로 바꾸는 순간 예전 제출에 붙은 (지금은
+     * 내용도 다른) 사본까지 소급 공개된다.
+     *
+     * (스냅샷을 붙이는 쪽은 {@code JudgeService} — 여기서는 읽기만 한다.)
      */
     @Transactional(readOnly = true)
-    public String contentForSnapshot(Long userId, Long problemId) {
+    public NoteSnapshot snapshotFor(Long userId, Long problemId) {
         return noteRepository.findByUserIdAndProblemId(userId, problemId)
-                .map(ProblemNote::getContent)
+                .map(note -> new NoteSnapshot(note.getContent(), note.isPublic()))
                 .orElse(null);
     }
+
+    /** 정답 제출에 박히는 메모 사본과 그 시점의 공개 여부. */
+    public record NoteSnapshot(String content, boolean isPublic) {}
 
     private Problem requireProblem(Long problemId) {
         return problemRepository.findById(problemId)

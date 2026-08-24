@@ -45,10 +45,10 @@ export const problemsApi = {
   // 빈 내용으로 저장하면 서버가 행을 지운다(별도 삭제 API 없음).
   getNote: (problemId: number) =>
     api<ProblemNoteResponse>(`/api/problems/${problemId}/note`),
-  saveNote: (problemId: number, content: string) =>
+  saveNote: (problemId: number, content: string, isPublic: boolean) =>
     api<ProblemNoteResponse>(`/api/problems/${problemId}/note`, {
       method: "PUT",
-      body: { content },
+      body: { content, isPublic },
     }),
   detail: (id: number) =>
     api<ProblemDetailResponse>(`/api/problems/${id}`),

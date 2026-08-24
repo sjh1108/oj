@@ -231,13 +231,16 @@ export interface SubmissionDetailResponse extends SubmissionResponse {
   sourceCode: string;
   errorMessage: string | null;
   subtaskResults: SubtaskResult[];
-  // 정답 처리 시점의 내 메모. 남의 제출을 볼 때는 서버가 항상 null로 내려준다.
+  // 정답 처리 시점의 메모. 본인은 언제나 받고, 남은 그때 공개로 둔 메모만 받는다.
   noteSnapshot: string | null;
+  noteSnapshotPublic: boolean;
 }
 
 // 문제별 개인 메모. 메모가 없으면 content가 null이다.
 export interface ProblemNoteResponse {
   content: string | null;
+  // 공개하면 그 문제를 이미 푼 사람이 내 정답 제출에서 이 메모를 볼 수 있다.
+  isPublic: boolean;
   updatedAt: string | null;
 }
 

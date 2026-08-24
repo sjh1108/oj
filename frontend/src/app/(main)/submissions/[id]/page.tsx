@@ -13,6 +13,7 @@ import {
   LANGUAGE_EXTENSION,
   sanitizeFilename,
 } from "@/lib/download";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeEditor } from "@/components/code-editor";
@@ -226,12 +227,19 @@ export default function SubmissionDetailPage() {
         </Card>
       )}
 
-      {/* 정답 처리 시점의 내 메모. 서버가 본인에게만 내려주므로 남의 제출에서는
-          비어 있다(SubmissionDetailResponse). */}
+      {/* 정답 처리 시점의 메모. 남의 제출에서는 그때 공개로 둔 메모만 내려온다
+          (SubmissionDetailResponse). */}
       {s.noteSnapshot && (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">이 문제를 풀 때 남긴 메모</CardTitle>
+          <CardHeader className="flex-row items-center justify-between gap-3">
+            <CardTitle className="text-base">
+              {isOwner ? "이 문제를 풀 때 남긴 메모" : `${s.username} 님의 풀이 메모`}
+            </CardTitle>
+            {isOwner && s.noteSnapshotPublic && (
+              <Badge variant="outline" className="text-muted-foreground">
+                공개됨
+              </Badge>
+            )}
           </CardHeader>
           <CardContent>
             <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap overflow-auto max-h-64 font-sans">

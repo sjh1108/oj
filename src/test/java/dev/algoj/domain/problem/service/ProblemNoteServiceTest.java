@@ -68,7 +68,7 @@ class ProblemNoteServiceTest {
         when(noteRepository.save(any(ProblemNote.class))).thenAnswer(inv -> inv.getArgument(0));
 
         ProblemNoteResponse response =
-                service.update(1L, 7L, new UpdateProblemNoteRequest("dp[mask][k]"));
+                service.update(1L, 7L, new UpdateProblemNoteRequest("dp[mask][k]", false));
 
         assertThat(response.content()).isEqualTo("dp[mask][k]");
     }
@@ -80,7 +80,7 @@ class ProblemNoteServiceTest {
         when(noteRepository.findByUserIdAndProblemId(1L, 7L)).thenReturn(Optional.of(existing));
         when(noteRepository.save(existing)).thenReturn(existing);
 
-        assertThat(service.update(1L, 7L, new UpdateProblemNoteRequest("새 메모")).content())
+        assertThat(service.update(1L, 7L, new UpdateProblemNoteRequest("새 메모", false)).content())
                 .isEqualTo("새 메모");
         assertThat(existing.getContent()).isEqualTo("새 메모");
         verify(userRepository, never()).findById(any());
@@ -94,7 +94,7 @@ class ProblemNoteServiceTest {
         when(noteRepository.findByUserIdAndProblemId(1L, 7L)).thenReturn(Optional.of(existing));
 
         ProblemNoteResponse response =
-                service.update(1L, 7L, new UpdateProblemNoteRequest("   \n  "));
+                service.update(1L, 7L, new UpdateProblemNoteRequest("   \n  ", false));
 
         assertThat(response.content()).isNull();
         verify(noteRepository).delete(existing);
@@ -106,7 +106,7 @@ class ProblemNoteServiceTest {
         givenProblem();
         when(noteRepository.findByUserIdAndProblemId(1L, 7L)).thenReturn(Optional.empty());
 
-        assertThat(service.update(1L, 7L, new UpdateProblemNoteRequest(null)).content()).isNull();
+        assertThat(service.update(1L, 7L, new UpdateProblemNoteRequest(null, false)).content()).isNull();
         verify(noteRepository, never()).save(any());
     }
 
@@ -117,7 +117,7 @@ class ProblemNoteServiceTest {
         when(userRepository.findById(1L)).thenReturn(Optional.of(user()));
         when(noteRepository.save(any(ProblemNote.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThat(service.update(1L, 7L, new UpdateProblemNoteRequest("  메모  \n")).content())
+        assertThat(service.update(1L, 7L, new UpdateProblemNoteRequest("  메모  \n", false)).content())
                 .isEqualTo("메모");
     }
 
@@ -131,21 +131,47 @@ class ProblemNoteServiceTest {
                 .isEqualTo(ErrorCode.PROBLEM_NOT_FOUND);
     }
 
-    // 정답 스냅샷은 메모가 없으면 null이어야 한다 — 빈 문자열이 제출에 붙으면
+    // 정답 스냅샷은 메모가 없으면 null이어야 한다 — 빈 사본이 제출에 붙으면
     // 프론트가 "메모 있음"으로 오해한다.
     @Test
-    void contentForSnapshot_withoutRow_returnsNull() {
+    void snapshotFor_withoutRow_returnsNull() {
         when(noteRepository.findByUserIdAndProblemId(1L, 7L)).thenReturn(Optional.empty());
 
-        assertThat(service.contentForSnapshot(1L, 7L)).isNull();
+        assertThat(service.snapshotFor(1L, 7L)).isNull();
     }
 
     @Test
-    void contentForSnapshot_withRow_returnsContent() {
+    void snapshotFor_withRow_carriesContentAndVisibility() {
         when(noteRepository.findByUserIdAndProblemId(1L, 7L))
-                .thenReturn(Optional.of(note("정답 당시 메모")));
+                .thenReturn(Optional.of(note("정답 당시 메모", true)));
 
-        assertThat(service.contentForSnapshot(1L, 7L)).isEqualTo("정답 당시 메모");
+        assertThat(service.snapshotFor(1L, 7L))
+                .isEqualTo(new ProblemNoteService.NoteSnapshot("정답 당시 메모", true));
+    }
+
+    // 공개는 명시적 선택이어야 한다 — 요청에 값이 없으면 비공개로 저장한다.
+    @Test
+    void update_withoutVisibility_staysPrivate() {
+        givenProblem();
+        when(noteRepository.findByUserIdAndProblemId(1L, 7L)).thenReturn(Optional.empty());
+        when(userRepository.findById(1L)).thenReturn(Optional.of(user()));
+        when(noteRepository.save(any(ProblemNote.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        assertThat(service.update(1L, 7L, new UpdateProblemNoteRequest("메모", null)).isPublic())
+                .isFalse();
+    }
+
+    @Test
+    void update_canTurnVisibilityOnAndBackOff() {
+        givenProblem();
+        ProblemNote existing = note("메모", false);
+        when(noteRepository.findByUserIdAndProblemId(1L, 7L)).thenReturn(Optional.of(existing));
+        when(noteRepository.save(existing)).thenReturn(existing);
+
+        assertThat(service.update(1L, 7L, new UpdateProblemNoteRequest("메모", true)).isPublic())
+                .isTrue();
+        assertThat(service.update(1L, 7L, new UpdateProblemNoteRequest("메모", false)).isPublic())
+                .isFalse();
     }
 
     private void givenProblem() {
@@ -153,7 +179,11 @@ class ProblemNoteServiceTest {
     }
 
     private ProblemNote note(String content) {
-        return ProblemNote.of(user(), problem(), content);
+        return note(content, false);
+    }
+
+    private ProblemNote note(String content, boolean isPublic) {
+        return ProblemNote.of(user(), problem(), content, isPublic);
     }
 
     private Problem problem() {

@@ -49,24 +49,31 @@ public class ProblemNote {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    // 공개하면 정답 처리 때 뜨는 스냅샷이 "그 문제를 이미 푼 사람"에게도 보인다.
+    // 기본은 비공개 — 메모는 원래 혼잣말이고, 공개는 명시적 선택이어야 한다.
+    @Column(nullable = false)
+    private boolean isPublic;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
-    private ProblemNote(User user, Problem problem, String content) {
+    private ProblemNote(User user, Problem problem, String content, boolean isPublic) {
         this.user = user;
         this.problem = problem;
         this.content = content;
+        this.isPublic = isPublic;
     }
 
-    public static ProblemNote of(User user, Problem problem, String content) {
-        return new ProblemNote(user, problem, content);
+    public static ProblemNote of(User user, Problem problem, String content, boolean isPublic) {
+        return new ProblemNote(user, problem, content, isPublic);
     }
 
-    public void updateContent(String content) {
+    public void update(String content, boolean isPublic) {
         this.content = content;
+        this.isPublic = isPublic;
     }
 
     @PrePersist

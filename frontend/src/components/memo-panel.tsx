@@ -23,6 +23,9 @@ const OPEN_KEY = "algoj-memo-open";
 
 type SaveState = "idle" | "saving" | "saved";
 
+// 한 번의 저장으로 나가는 묶음 — 본문과 공개 여부는 같은 PUT에 실린다.
+type NotePayload = { content: string; isPublic: boolean };
+
 function readOpenPreference(): boolean {
   if (typeof window === "undefined") return false;
   try {
@@ -46,11 +49,12 @@ export function MemoPanel({ problemId }: { problemId: number }) {
 
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
 
   // 저장 대기 타이머와 "아직 안 보낸 값" — 언마운트 때 이 값을 즉시 보낸다.
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pending = useRef<string | null>(null);
+  const pending = useRef<NotePayload | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const note = useQuery({
@@ -61,7 +65,8 @@ export function MemoPanel({ problemId }: { problemId: number }) {
   });
 
   const save = useMutation({
-    mutationFn: (content: string) => problemsApi.saveNote(problemId, content),
+    mutationFn: ({ content, isPublic: nextPublic }: NotePayload) =>
+      problemsApi.saveNote(problemId, content, nextPublic),
     onSuccess: (saved) => {
       qc.setQueryData<ProblemNoteResponse>(queryKey, saved);
       setSaveState("saved");
@@ -85,6 +90,7 @@ export function MemoPanel({ problemId }: { problemId: number }) {
     if (!loaded || hydratedFor.current === problemId) return;
     hydratedFor.current = problemId;
     setValue(loaded.content ?? "");
+    setIsPublic(loaded.isPublic);
     if (loaded.content) setOpen(true);
     else setOpen(readOpenPreference());
   }, [loaded, problemId]);
@@ -103,16 +109,31 @@ export function MemoPanel({ problemId }: { problemId: number }) {
     };
   }, [problemId]);
 
-  function handleChange(next: string) {
-    setValue(next.slice(0, MAX_LENGTH));
-    pending.current = next.slice(0, MAX_LENGTH);
+  // 디바운스 저장. 본문 입력과 공개 토글이 같은 큐를 쓴다 — 둘은 한 번의 PUT으로 나간다.
+  function queueSave(next: NotePayload, immediate = false) {
+    pending.current = next;
     setSaveState("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      const content = pending.current;
-      pending.current = null;
-      if (content !== null) save.mutate(content);
-    }, SAVE_DELAY_MS);
+    saveTimer.current = setTimeout(
+      () => {
+        const payload = pending.current;
+        pending.current = null;
+        if (payload) save.mutate(payload);
+      },
+      immediate ? 0 : SAVE_DELAY_MS,
+    );
+  }
+
+  function handleChange(next: string) {
+    const content = next.slice(0, MAX_LENGTH);
+    setValue(content);
+    queueSave({ content, isPublic });
+  }
+
+  // 공개/비공개는 의도가 분명한 조작이라 기다리지 않고 바로 보낸다.
+  function handleVisibilityChange(nextPublic: boolean) {
+    setIsPublic(nextPublic);
+    queueSave({ content: value, isPublic: nextPublic }, true);
   }
 
   function toggle() {
@@ -167,6 +188,29 @@ export function MemoPanel({ problemId }: { problemId: number }) {
               {value.length.toLocaleString("ko-KR")} / {MAX_LENGTH.toLocaleString("ko-KR")}
             </span>
           </div>
+          {/* 공개해도 이 문제를 아직 못 푼 사람에게는 보이지 않는다 — 제출 상세가
+              원래 "공개 + 정답 + 보는 사람도 해결"일 때만 열리기 때문. */}
+          <label
+            className={cn(
+              "flex items-start gap-2 pt-1 text-xs",
+              value.trim() ? "cursor-pointer" : "opacity-50",
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={isPublic}
+              disabled={!value.trim()}
+              onChange={(e) => handleVisibilityChange(e.target.checked)}
+              className="mt-0.5 size-3.5 shrink-0 rounded border-input"
+            />
+            <span className="text-muted-foreground">
+              메모 공개
+              <span className="block">
+                이 문제를 이미 푼 사람이 내 정답 제출에서 이 메모를 볼 수 있습니다. 지금까지
+                남은 기록은 그대로 두고, 앞으로의 정답부터 공개됩니다.
+              </span>
+            </span>
+          </label>
         </div>
       )}
     </div>

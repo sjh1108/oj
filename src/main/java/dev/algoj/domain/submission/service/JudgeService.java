@@ -167,8 +167,11 @@ public class JudgeService {
             // 정답일 때만 그 시점의 문제 메모를 제출에 복사한다. 메모는 이후 계속
             // 고쳐지지만 제출 로그는 "그때 어떻게 풀었나"의 기록이어야 한다.
             if (status == Submission.Status.ACCEPTED) {
-                s.attachNoteSnapshot(problemNoteService.contentForSnapshot(
-                        s.getUser().getId(), s.getProblem().getId()));
+                ProblemNoteService.NoteSnapshot note = problemNoteService.snapshotFor(
+                        s.getUser().getId(), s.getProblem().getId());
+                if (note != null) {
+                    s.attachNoteSnapshot(note.content(), note.isPublic());
+                }
             }
         });
     }

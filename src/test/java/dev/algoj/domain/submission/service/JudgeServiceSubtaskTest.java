@@ -87,12 +87,31 @@ class JudgeServiceSubtaskTest {
         when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
         when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class), any()))
                 .thenReturn(judge0(AC));
-        when(problemNoteService.contentForSnapshot(any(), any())).thenReturn("정답 당시 메모");
+        when(problemNoteService.snapshotFor(any(), any()))
+                .thenReturn(new ProblemNoteService.NoteSnapshot("정답 당시 메모", true));
 
         service.judge(1L);
 
         assertThat(s.getStatus()).isEqualTo(Submission.Status.ACCEPTED);
         assertThat(s.getNoteSnapshot()).isEqualTo("정답 당시 메모");
+        // 공개 여부는 정답 시점의 선택을 그대로 박아둔다 — 이후 메모 설정을 바꿔도
+        // 이 제출에 붙은 사본의 공개 여부는 움직이지 않는다.
+        assertThat(s.getNoteSnapshotPublic()).isTrue();
+    }
+
+    @Test
+    void acceptedSubmission_withPrivateNote_keepsSnapshotPrivate() {
+        Submission s = submissionFor(problemWithTwoSubtasks(), 3);
+        when(submissionRepository.findById(1L)).thenReturn(Optional.of(s));
+        when(judge0Client.submitAndWait(any(Judge0SubmissionRequest.class), any()))
+                .thenReturn(judge0(AC));
+        when(problemNoteService.snapshotFor(any(), any()))
+                .thenReturn(new ProblemNoteService.NoteSnapshot("비공개 메모", false));
+
+        service.judge(1L);
+
+        assertThat(s.getNoteSnapshot()).isEqualTo("비공개 메모");
+        assertThat(s.getNoteSnapshotPublic()).isFalse();
     }
 
     @Test
@@ -106,7 +125,7 @@ class JudgeServiceSubtaskTest {
 
         assertThat(s.getStatus()).isEqualTo(Submission.Status.PARTIAL);
         assertThat(s.getNoteSnapshot()).isNull();
-        verify(problemNoteService, never()).contentForSnapshot(any(), any());
+        verify(problemNoteService, never()).snapshotFor(any(), any());
     }
 
     private Problem problemWithTwoSubtasks() {

@@ -9,6 +9,9 @@ CREATE TABLE problem_notes
     user_id    BIGINT      NOT NULL,
     problem_id BIGINT      NOT NULL,
     content    TEXT        NOT NULL,
+    -- 공개하면 "그 문제를 이미 푼 사람"에게만 보인다(제출 상세의 기존 열람 조건).
+    -- 안 푼 사람에게는 애초에 닿지 않으므로 스포일러 정책과 충돌하지 않는다.
+    is_public  BIT         NOT NULL DEFAULT 0,
     created_at DATETIME(6) NOT NULL,
     updated_at DATETIME(6) NOT NULL,
     PRIMARY KEY (id),
@@ -28,3 +31,9 @@ CREATE TABLE problem_notes
 -- 오답/부분점수 제출에는 남기지 않는다(NULL).
 ALTER TABLE submissions
     ADD COLUMN note_snapshot TEXT NULL;
+
+-- 공개 여부도 정답 시점의 선택을 함께 찍는다. 살아있는 메모의 공개 설정을 그때그때
+-- 참조하면, 나중에 메모를 공개로 바꾸는 순간 예전 제출에 붙은 (지금은 다른 내용인)
+-- 사본들까지 소급 공개된다.
+ALTER TABLE submissions
+    ADD COLUMN note_snapshot_public BIT NOT NULL DEFAULT 0;
