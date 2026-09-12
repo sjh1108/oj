@@ -201,11 +201,27 @@ curl "https://www.duckdns.org/update?domains=algoj&token=<토큰>&ip=<새 공인
 박스에서:
 
 ```bash
-# 업스트림 시드 + 내부 고정 진입점 (deploy/nginx/ 의 두 파일)
-sudo cp nginx/algoj-upstream.conf nginx/algoj-internal.conf /etc/nginx/conf.d/
-# 공개 TLS 사이트 블록의 proxy_pass 는 http://algoj_api (업스트림)로
-sudo certbot --nginx -d algoj.duckdns.org
+sudo apt install -y nginx certbot python3-certbot-nginx
+
+# 업스트림 시드 + 내부 고정 진입점
+sudo cp /opt/algoj/repo/deploy/nginx/algoj-upstream.conf /etc/nginx/conf.d/
+sudo cp /opt/algoj/repo/deploy/nginx/algoj-internal.conf /etc/nginx/conf.d/
+
+# 공개 사이트 블록 (proxy_pass 는 algoj_api 업스트림을 가리킨다)
+sudo cp /opt/algoj/repo/deploy/nginx/algoj-site.conf /etc/nginx/sites-available/algoj
+sudo ln -sf /etc/nginx/sites-available/algoj /etc/nginx/sites-enabled/algoj
+sudo rm -f /etc/nginx/sites-enabled/default
+
+# 배포 스크립트가 upstream 파일을 다시 쓰고 reload 할 수 있어야 한다
+sudo tee /etc/sudoers.d/algoj-deploy >/dev/null <<'SUDOERS'
+ubuntu ALL=(root) NOPASSWD: /usr/sbin/nginx, /usr/bin/tee /etc/nginx/conf.d/algoj-upstream.conf
+SUDOERS
+sudo chmod 440 /etc/sudoers.d/algoj-deploy
+
 sudo nginx -t && sudo systemctl reload nginx
+
+# DNS가 이 박스를 가리킨 뒤에 TLS 발급 (80 → 443 리다이렉트까지 자동)
+sudo certbot --nginx -d algoj.duckdns.org
 ```
 
 `deploy-api.sh`가 배포 때마다 `algoj-upstream.conf`를 blue/green 포트로 다시 쓰고 reload 하므로
