@@ -113,8 +113,13 @@ GET  /languages          ← 앱은 헬스체크로만 쓴다 (Judge0Client.isUp
 cd /opt/algoj
 docker compose -f docker-compose.judge.yml --env-file .env pull
 docker compose -f docker-compose.judge.yml --env-file .env up -d
-docker compose -f docker-compose.judge.yml ps
+docker logs -f algoj-judge-runner        # "sandbox image ready" 를 기다린다
 ```
+
+**첫 기동은 오래 걸린다.** compose가 받는 건 러너 이미지뿐이고, 툴체인이 든 샌드박스
+이미지(~1GB)는 러너가 시작할 때 직접 받는다. 그동안은 HTTP 서비스가 아직 안 뜨므로
+컨테이너가 잠시 unhealthy로 보인다(healthcheck의 `start_period`가 그만큼 잡혀 있다).
+로그에 `sandbox image ready`가 찍힌 뒤에 검증으로 넘어간다.
 
 `.env`에서 API가 이 서비스를 보게 한다:
 
@@ -146,7 +151,9 @@ ls /opt/algoj/judge-work                         # 실행 후엔 비어 있어�
 ```
 
 - **전부 SYSTEM_ERROR(13)** — 샌드박스 이미지를 못 받았거나 docker 소켓이 안 물렸다.
-  러너 로그의 `docker:` 줄을 본다.
+  러너 로그의 `docker:` 줄을 본다. 이미지가 없으면 `--pull never` 때문에 즉시 실패하는데,
+  느린 pull이 제출 타임아웃 안에서 조용히 도는 것보다 낫다고 보고 그렇게 뒀다.
+  손으로 받으려면 `docker pull ghcr.io/sjh1108/oj-judge-sandbox:latest`.
 - **자바만 실패** — 메모리 제한이 빡빡한 경우가 대부분이다. 문제의 메모리 제한을 올린다.
 - **작업 디렉터리에 찌꺼기가 쌓임** — 러너가 비정상 종료한 흔적이다. `judge-work` 아래
   오래된 디렉터리는 지워도 안전하다.
