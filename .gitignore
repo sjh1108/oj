@@ -47,3 +47,7 @@ out/
 .env
 .env.*
 !*.example
+
+# Python (judge-runner)
+__pycache__/
+*.pyc

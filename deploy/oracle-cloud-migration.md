@@ -46,19 +46,14 @@ free -m; df -h  # 12GB인지, 부트 볼륨 여유가 있는지
 - **API·MySQL·RabbitMQ·봇·nginx** → 전부 arm64 이미지가 있다. 문제 없다.
   (이 PR이 API·봇 이미지를 `linux/amd64,linux/arm64` 멀티아치로 푸시하도록 바꿔 놨다.
   이게 없으면 ARM 박스에서 컨테이너가 `exec format error`로 아예 안 뜬다.)
-- **Judge0** → 공식 이미지 `judge0/judge0:1.13.1`은 **단일 아키텍처(amd64)** 다.
-  멀티아치 인덱스가 아니라 ARM 박스에서 그냥 안 돈다. 선택지:
+- **Judge0** → 공식 이미지는 1.11~1.13 **모든 태그가 단일 아키텍처(amd64)** 라 ARM 박스에서
+  돌지 않는다. 무료 x86 인스턴스도 더 이상 없으므로(Always Free 한도가 축소됐다) 채점기는
+  **직접 만든 arm64 러너**로 대체했다 → [`judge-runner/README.md`](../judge-runner/README.md)
 
-| 방안 | 비용 | 작업량 | 메모 |
-|---|---|---|---|
-| **A. OCI Always Free AMD micro**(1 OCPU/1GB) 1대에 Judge0 | 0 | 소 | x86이라 그대로 뜬다. 다만 Judge0 권장 사양(2GB)보다 작아 워커 1개로 줄이고 메모리 한도를 낮춰야 한다. **먼저 이걸 시도** |
-| **B. 자체 arm64 채점 러너**(isolate + 언어 툴체인, Judge0 호환 API) | 0 | 대 | 앱은 `JUDGE0_URL`만 바꾸면 된다 — 실제로 쓰는 API는 `POST /submissions?wait=true`와 `GET /languages` 둘뿐이다. A가 메모리로 실패하면 이쪽 |
-| C. x86 저가 VPS(Hetzner·Vultr) | 월 $4~5 | 소 | 가장 확실하지만 "무료" 목표에서 벗어난다 |
-| D. Ampere에서 QEMU 에뮬레이션 | 0 | 소 | **비추천** — 실행 속도가 왜곡돼 시간 제한 채점이 무의미해진다 |
-
-A/C를 고르면 `.env`의 `JUDGE0_URL`만 그 박스를 가리키면 되고, 앱 코드는 안 건드린다.
-PyPy 3는 새 Judge0 박스에서 `deploy/judge0/README.md` 절차를 한 번 더 밟아야 한다
-(안 하면 PyPy 제출만 S002로 실패한다).
+  앱이 Judge0에서 쓰는 API가 `POST /submissions?wait=true`와 `GET /languages` 둘뿐이라
+  그 표면만 구현했고, 격리는 제출마다 새 컨테이너(네트워크 없음·권한 없음·읽기전용·
+  메모리/PID 상한)로 얻는다. `.env`의 `JUDGE0_URL`만 바꾸면 되고 앱 코드는 그대로다.
+  **PyPy를 박스에서 손으로 등록하던 절차도 사라졌다** — 샌드박스 이미지에 들어 있다.
 
 ---
 
@@ -255,6 +250,31 @@ Vercel 프로젝트 환경변수의 API 주소가 `https://algoj.duckdns.org`를
 
 ---
 
+## 8.5단계 — 채점기 올리기
+
+Judge0 대신 arm64 러너를 쓴다(1단계 참고). 같은 박스, 같은 `algoj-net`이다.
+
+```bash
+cd /opt/algoj
+cp repo/deploy/docker-compose.judge.yml .
+docker compose -f docker-compose.judge.yml --env-file .env pull
+docker compose -f docker-compose.judge.yml --env-file .env up -d
+python3 repo/judge-runner/selftest.py        # 6개 언어 + 실패 모드 전부 확인
+```
+
+`.env`에서 API가 러너를 보게 하고 재배포한다:
+
+```ini
+JUDGE0_URL=http://judge-runner:2358
+```
+
+```bash
+bash deploy-api.sh
+```
+
+밀려 있던 PENDING 제출은 스위퍼가 1분 주기로 재적재하므로 손댈 게 없다.
+자세한 내용·보안 모델·문제 해결은 [`judge-runner/README.md`](../judge-runner/README.md).
+
 ## 컷오버 체크리스트
 
 - [ ] `uname -m` 확인, 채점기 경로 결정(1단계)
@@ -262,7 +282,7 @@ Vercel 프로젝트 환경변수의 API 주소가 `https://algoj.duckdns.org`를
 - [ ] 보안 목록 + iptables 80/443
 - [ ] `docker-compose.oci.yml` 기동, mysql·rabbitmq healthy
 - [ ] 덤프 import 후 문제·제출 건수 확인
-- [ ] Judge0 기동 + PyPy 등록, `curl $JUDGE0_URL/languages`
+- [ ] 채점기 기동 + `selftest.py` 통과 (PyPy 수동 등록은 이제 불필요)
 - [ ] DuckDNS IP 재지정, certbot 인증서 발급
 - [ ] CD Secrets 교체 후 수동 배포 1회 → `/api/health` 200
 - [ ] 웹에서 로그인 → 문제 열람 → **제출이 실제로 채점되는지**

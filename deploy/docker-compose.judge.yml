@@ -1,0 +1,47 @@
+# Judging stack for the single-box deployment — the arm64 replacement for the
+# Judge0 box that used to live on AWS (JJ). Judge0's own images are amd64-only,
+# so this runs judge-runner instead; see judge-runner/README.md.
+#
+#   cd /opt/algoj
+#   docker compose -f docker-compose.judge.yml --env-file .env pull
+#   docker compose -f docker-compose.judge.yml --env-file .env up -d
+#   curl -s http://127.0.0.1:2358/languages
+#
+# .env on the box then points the API at it:
+#   JUDGE0_URL=http://judge-runner:2358
+#
+# The port is NOT published to the host: the API reaches this over algoj-net by
+# service name, and nothing outside the box has any business talking to it.
+
+services:
+  judge-runner:
+    image: ${JUDGE_RUNNER_IMAGE:-ghcr.io/sjh1108/oj-judge-runner}:latest
+    container_name: algoj-judge-runner
+    restart: unless-stopped
+    environment:
+      JUDGE_SANDBOX_IMAGE: ${JUDGE_SANDBOX_IMAGE:-ghcr.io/sjh1108/oj-judge-sandbox}:latest
+      # Must be the path as the HOST sees it — the runner passes it straight to
+      # `docker run -v`, and the daemon resolves it on the host, not in here.
+      JUDGE_WORK_DIR: /opt/algoj/judge-work
+      JUDGE_MAX_PARALLEL: ${JUDGE_MAX_PARALLEL:-2}
+    volumes:
+      # Lets the runner start sandbox containers on the host daemon. This is
+      # effectively root on the box, which is why the runner is not reachable
+      # from outside and never runs contestant code in its own process.
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Same path on both sides so a bind mount the runner builds is valid for
+      # the daemon too.
+      - /opt/algoj/judge-work:/opt/algoj/judge-work
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:2358/languages').read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+# Join the network the API and the rest of the stack already share
+# (created by docker-compose.oci.yml).
+networks:
+  default:
+    name: algoj-net
+    external: true

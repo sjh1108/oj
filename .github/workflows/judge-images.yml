@@ -1,0 +1,92 @@
+# Judge images — built separately from the API's CD.
+#
+# The sandbox image carries six language toolchains (a JDK among them) and is
+# slow to build, while it changes only when judge-runner/ does. Keeping it out
+# of cd.yml means an ordinary app deploy is not held up by it.
+name: Judge images
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "judge-runner/**"
+      - ".github/workflows/judge-images.yml"
+  pull_request:
+    paths:
+      - "judge-runner/**"
+      - ".github/workflows/judge-images.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: judge-images-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUNNER_IMAGE: ghcr.io/${{ github.repository_owner }}/oj-judge-runner
+  SANDBOX_IMAGE: ghcr.io/${{ github.repository_owner }}/oj-judge-sandbox
+
+jobs:
+  test:
+    name: Runner logic tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # The verdict logic is what decides whether a correct solution is marked
+      # wrong, and it needs no docker daemon — so it is gated here.
+      - run: python -m unittest discover -s judge-runner -v
+
+  build:
+    name: Build & push judge images
+    needs: test
+    # Only master publishes; a PR build just proves the images still build.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # The judge box is arm64 (Oracle Ampere); amd64 is built too so the
+      # images stay usable on an x86 box.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: ${{ github.event_name != 'pull_request' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push runner
+        uses: docker/build-push-action@v6
+        with:
+          context: ./judge-runner
+          file: ./judge-runner/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.RUNNER_IMAGE }}:latest
+            ${{ env.RUNNER_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha,scope=judge-runner
+          cache-to: type=gha,mode=max,scope=judge-runner
+
+      - name: Build & push sandbox
+        uses: docker/build-push-action@v6
+        with:
+          context: ./judge-runner/sandbox
+          file: ./judge-runner/sandbox/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.SANDBOX_IMAGE }}:latest
+            ${{ env.SANDBOX_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha,scope=judge-sandbox
+          cache-to: type=gha,mode=max,scope=judge-sandbox
