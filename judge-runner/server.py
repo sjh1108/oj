@@ -137,6 +137,10 @@ def docker_run(token, language_id, cpu_limit, memory_kb, fsize_kb, host_dir):
         "--tmpfs", "/tmp:rw,size=64m",
         "-v", f"{host_dir}:/work",
         "-w", "/work",
+        # The image is pulled once at startup (warm_sandbox_image). Failing fast
+        # here beats an implicit pull inside the guard below: a cold ~1GB pull
+        # outlives it, and the submission dies as an unexplained internal error.
+        "--pull", "never",
         "-e", f"LANG_ID={language_id}",
         "-e", f"CPU_LIMIT={cpu_limit}",
         "-e", f"WALL_LIMIT={wall_limit}",
@@ -386,8 +390,34 @@ class Handler(BaseHTTPRequestHandler):
         self._send(201, result)
 
 
+def warm_sandbox_image():
+    """Make sure the sandbox image is on the box before the first submission.
+
+    Otherwise the first `docker run` pulls it — around a gigabyte of toolchains —
+    inside the per-submission guard, which it comfortably outlives. Best effort:
+    a runner that starts while the registry is unreachable should still come up
+    and serve, reporting a clear error per submission until the image lands.
+    """
+    have = subprocess.run(["docker", "image", "inspect", SANDBOX_IMAGE],
+                          capture_output=True)
+    if have.returncode == 0:
+        log(f"sandbox image present: {SANDBOX_IMAGE}")
+        return
+    log(f"pulling sandbox image {SANDBOX_IMAGE} (first start; this takes a while)")
+    try:
+        pull = subprocess.run(["docker", "pull", SANDBOX_IMAGE],
+                              capture_output=True, timeout=1800)
+        if pull.returncode == 0:
+            log("sandbox image ready")
+        else:
+            log(f"sandbox pull failed: {pull.stderr.decode('utf-8', 'replace').strip()[:500]}")
+    except (subprocess.SubprocessError, OSError) as e:
+        log(f"sandbox pull failed: {e!r}")
+
+
 def main():
     os.makedirs(WORK_DIR, exist_ok=True)
+    warm_sandbox_image()
     log(f"algoj-judge-runner listening on :{LISTEN_PORT} "
         f"(sandbox={SANDBOX_IMAGE}, work={WORK_DIR}, parallel={MAX_PARALLEL})")
     ThreadingHTTPServer(("0.0.0.0", LISTEN_PORT), Handler).serve_forever()
