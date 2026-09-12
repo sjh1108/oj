@@ -53,15 +53,27 @@ log "active=${active_port:-none} → deploying $new_color on $new_port ($IMAGE)"
 # compiler threads are pure overhead. SerialGC has the smallest native-memory
 # footprint and C1-only cuts startup compilation — both ease the swap pressure
 # that makes a cold boot crawl (and speed startup directly).
+# The SerialGC + C1-only tuning and the 300MB cap above are *small-box*
+# workarounds. On a roomy box (the Oracle Ampere instance has 12GB) they only
+# make the API slower, so pick the profile from the box's total RAM instead of
+# hardcoding the tight one. ROOMY_BOX_MB is the threshold between the two.
 STARTUP_OPTS="-XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+ROOMY_BOX_MB="${ROOMY_BOX_MB:-4096}"
 java_opts="${JAVA_OPTS:-}"
 if [ -z "$java_opts" ]; then
-  java_opts="-Xms128m -Xmx300m $STARTUP_OPTS"
+  total_mb="$(free -m | awk '/^Mem:/ {print $2}')"
   avail_mb="$(free -m | awk '/^Mem:/ {print $7}')"
-  if [ -n "$avail_mb" ] && [ "$avail_mb" -lt "$MEM_THRESHOLD_MB" ]; then
+  if [ -n "$total_mb" ] && [ "$total_mb" -ge "$ROOMY_BOX_MB" ]; then
+    # Roomy box: stock G1 + full JIT, and a heap big enough that GC is not the
+    # bottleneck. Two of these overlap briefly during blue-green — still a small
+    # slice of 12GB.
+    java_opts="-Xms512m -Xmx1500m"
+    log "roomy box (${total_mb}MB total) → JAVA_OPTS=$java_opts"
+  elif [ -n "$avail_mb" ] && [ "$avail_mb" -lt "$MEM_THRESHOLD_MB" ]; then
     java_opts="-Xms128m -Xmx256m $STARTUP_OPTS"
     log "low memory (${avail_mb}MB avail < ${MEM_THRESHOLD_MB}MB) → JAVA_OPTS=$java_opts"
   else
+    java_opts="-Xms128m -Xmx300m $STARTUP_OPTS"
     log "heap capped for small box → JAVA_OPTS=$java_opts"
   fi
 fi
@@ -92,6 +104,17 @@ run_args=(
   # container runs on the default bridge with no per-container host overrides.
   -p "127.0.0.1:${new_port}:8080"
 )
+
+# Single-box layout: MySQL and RabbitMQ run in compose on the algoj-net network
+# (deploy/docker-compose.oci.yml) and publish no host ports, so the API has to
+# join that network to resolve DB_HOST=mysql / RABBITMQ_HOST=rabbitmq. Where the
+# network does not exist — an external DB/broker reached by address — this is a
+# no-op and the container stays on the default bridge as before.
+NETWORK="${NETWORK:-algoj-net}"
+if [ -n "$NETWORK" ] && docker network inspect "$NETWORK" >/dev/null 2>&1; then
+  log "attaching to docker network $NETWORK"
+  run_args+=(--network "$NETWORK")
+fi
 if [ -n "$java_opts" ]; then
   run_args+=(-e "JAVA_OPTS=$java_opts")
 fi

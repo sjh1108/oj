@@ -78,6 +78,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -101,6 +104,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          # arm64 too: the API box is an Ampere (ARM) instance, and a
+          # single-arch amd64 image simply refuses to start there.
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -116,6 +122,9 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
@@ -140,6 +149,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./discord-bot
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -202,34 +212,65 @@ jobs:
             core.setOutput("announce_b64",
               Buffer.from(JSON.stringify(payload), "utf8").toString("base64"));
 
-      # Copy the rolling-deploy toolchain to OJ (the LB + conductor box):
-      #   rolling-deploy.sh   — orchestrates both boxes
-      #   deploy-api-single.sh — per-box no-overlap deploy (also pushed to EOJ)
-      #   nginx/render-upstream.sh — drains a box at the nginx layer
-      - name: Copy rolling-deploy scripts to OJ
+      # Copy the deploy toolchain to the API box:
+      #   deploy-api.sh        — single-box blue-green (default topology)
+      #   rolling-deploy.sh    — two-box orchestrator (DEPLOY_TOPOLOGY=rolling)
+      #   deploy-api-single.sh — per-box no-overlap deploy used by the rolling path
+      #   nginx/render-upstream.sh — drains one box at the nginx layer (rolling only)
+      - name: Copy deploy scripts to the API box
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          source: "deploy/rolling-deploy.sh,deploy/deploy-api-single.sh,deploy/nginx/render-upstream.sh"
+          source: "deploy/deploy-api.sh,deploy/rolling-deploy.sh,deploy/deploy-api-single.sh,deploy/nginx/render-upstream.sh"
           target: /opt/algoj/
           strip_components: 1
 
-      - name: Rolling deploy across OJ + EOJ
+      # Default topology: ONE box running everything (see
+      # deploy/oracle-cloud-migration.md). The box has RAM to spare, so
+      # blue-green overlaps the two JVMs and nginx flips between them —
+      # zero downtime without a second box.
+      - name: Blue-green deploy (single box)
+        # success() is implicit only without an `if:` — spell it out, or a
+        # failed script copy would still fall through to a deploy.
+        if: ${{ success() && vars.DEPLOY_TOPOLOGY != 'rolling' }}
         uses: appleboy/ssh-action@v1.2.0
         env:
           IMAGE: ${{ env.IMAGE }}
           GHCR_USER: ${{ github.actor }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
-          ANNOUNCE_B64: ${{ steps.prinfo.outputs.announce_b64 }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          envs: IMAGE,GHCR_USER,GHCR_PAT,ANNOUNCE_B64
+          envs: IMAGE,GHCR_USER,GHCR_PAT
+          script: |
+            set -e
+            cd /opt/algoj
+            if [ -n "$GHCR_PAT" ]; then
+              echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            fi
+            chmod +x deploy-api.sh
+            IMAGE="${IMAGE}:latest" bash deploy-api.sh
+
+      # Legacy two-box topology (OJ + EOJ on AWS). Kept for the case where a
+      # second API box comes back; set the repo variable DEPLOY_TOPOLOGY=rolling.
+      - name: Rolling deploy across OJ + EOJ
+        if: ${{ success() && vars.DEPLOY_TOPOLOGY == 'rolling' }}
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          envs: IMAGE,GHCR_USER,GHCR_PAT
           script: |
             set -e
             cd /opt/algoj
@@ -243,15 +284,25 @@ jobs:
             # (over the private network) → restore → drain OJ → deploy OJ →
             # restore. One box always serves; each box runs a single JVM.
             IMAGE="${IMAGE}:latest" bash rolling-deploy.sh
-            # Tell the Discord bot to announce the update (best-effort: an
-            # absent/disabled bot must never fail the deploy).
-            if [ -n "$ANNOUNCE_B64" ]; then
-              echo "$ANNOUNCE_B64" | base64 -d | curl -m 10 -fsS -X POST \
-                -H "Content-Type: application/json" \
-                -H "X-Bot-Api-Key: $(grep '^BOT_API_KEY=' .env | cut -d= -f2-)" \
-                --data-binary @- http://127.0.0.1:3910/announce \
-                && echo "deploy announced to Discord" \
-                || echo "announce skipped (bot not reachable)"
-            else
-              echo "announce skipped (PR has no '## 공지' section)"
-            fi
+
+      # Tell the Discord bot to announce the update (best-effort: an
+      # absent/disabled bot must never fail the deploy).
+      - name: Announce the update on Discord
+        if: ${{ success() && steps.prinfo.outputs.announce_b64 != '' }}
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          ANNOUNCE_B64: ${{ steps.prinfo.outputs.announce_b64 }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          envs: ANNOUNCE_B64
+          script: |
+            cd /opt/algoj
+            echo "$ANNOUNCE_B64" | base64 -d | curl -m 10 -fsS -X POST \
+              -H "Content-Type: application/json" \
+              -H "X-Bot-Api-Key: $(grep '^BOT_API_KEY=' .env | cut -d= -f2-)" \
+              --data-binary @- http://127.0.0.1:3910/announce \
+              && echo "deploy announced to Discord" \
+              || echo "announce skipped (bot not reachable)"

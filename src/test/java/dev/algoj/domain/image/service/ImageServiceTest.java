@@ -66,6 +66,20 @@ class ImageServiceTest {
     }
 
     @Test
+    void upload_usesPublicBaseUrl_whenStorageIsNotAws() {
+        // S3 호환 스토리지(OCI Object Storage·R2)는 AWS 주소 형식으로 서빙되지 않는다.
+        ReflectionTestUtils.setField(service, "publicBaseUrl", "https://cdn.algoj.dev/images/");
+        when(s3ClientProvider.getIfAvailable()).thenReturn(s3Client);
+
+        UploadImageResponse res = service.upload(
+                new UploadImageRequest("image/png", b64(new byte[]{1, 2, 3})));
+
+        assertThat(res.url())
+                .startsWith("https://cdn.algoj.dev/images/problems/")
+                .endsWith(".png");
+    }
+
+    @Test
     void upload_rejectsUnsupportedContentType() {
         when(s3ClientProvider.getIfAvailable()).thenReturn(s3Client);
 

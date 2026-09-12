@@ -86,6 +86,13 @@ app:
     # 미설정이면 이미지 업로드 API가 503(I003)을 반환하고 나머지는 정상 동작.
     image-bucket: ${S3_IMAGE_BUCKET:}
     region: ${AWS_REGION:ap-northeast-2}
+    # AWS S3가 아닌 S3 호환 스토리지(OCI Object Storage·R2·MinIO)를 쓸 때만 채운다.
+    # endpoint를 채우면 path-style 주소(엔드포인트/버킷/키)가 기본이고,
+    # public-base-url은 업로드된 이미지가 실제로 서빙되는 주소의 prefix다.
+    # 셋 다 비우면 기존처럼 AWS S3로 동작한다.
+    endpoint: ${S3_ENDPOINT:}
+    path-style: ${S3_PATH_STYLE:}
+    public-base-url: ${S3_PUBLIC_BASE_URL:}
 
 algoj:
   cors:
