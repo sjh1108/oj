@@ -72,6 +72,17 @@ run_args=(
   # DB_HOST/DB_PORT, JUDGE0_URL and RABBITMQ_HOST all come from .env (RDS + JJ).
   -p "${PUBLISH_ADDR}:${PORT}:8080"
 )
+
+# Single-box layout: MySQL and RabbitMQ run in compose on the algoj-net network
+# (deploy/docker-compose.oci.yml) and publish no host ports, so the API has to
+# join that network to resolve DB_HOST=mysql / RABBITMQ_HOST=rabbitmq. Where the
+# network does not exist — an external DB/broker reached by address — this is a
+# no-op and the container stays on the default bridge as before.
+NETWORK="${NETWORK:-algoj-net}"
+if [ -n "$NETWORK" ] && docker network inspect "$NETWORK" >/dev/null 2>&1; then
+  log "attaching to docker network $NETWORK"
+  run_args+=(--network "$NETWORK")
+fi
 if [ -n "$java_opts" ]; then
   run_args+=(-e "JAVA_OPTS=$java_opts")
 fi

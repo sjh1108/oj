@@ -1,7 +1,11 @@
 # syntax=docker/dockerfile:1
 
 # ─── Build stage ─────────────────────────────────────────────
-FROM eclipse-temurin:21-jdk AS build
+# --platform=$BUILDPLATFORM: the jar is architecture-independent, so the Gradle
+# build always runs natively on the builder (amd64 CI runner) even when the
+# runtime image below is cross-built for arm64. Without this the arm64 variant
+# would compile under QEMU emulation — minutes slower, and prone to timing out.
+FROM --platform=$BUILDPLATFORM eclipse-temurin:21-jdk AS build
 WORKDIR /app
 
 # Cache dependency resolution: copy only build files first.

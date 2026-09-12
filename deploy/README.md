@@ -1,5 +1,11 @@
 # Deployment — OJ + EOJ 이중화
 
+> ⚠️ **이 문서는 AWS 구성(OJ·EOJ·JJ·RDS) 기준이다.** AWS 무료 크레딧이 소진돼 이 구성은 현재
+> 멈춰 있고, Oracle Cloud 단일 박스로 이전하는 중이다 →
+> [`oracle-cloud-migration.md`](oracle-cloud-migration.md).
+> 아래 절차(박스 준비·sudoers·Flyway·트러블슈팅)는 새 박스에서도 대부분 그대로 쓰이고,
+> 이중화(rolling) 부분만 단일 박스 blue-green으로 대체된다. 이전이 끝나면 이 문서를 갱신한다.
+
 API는 **두 박스(OJ·EOJ)에서 동시에** 돌고, DB·브로커·샌드박스는 밖으로 빼놨다.
 설계 배경은 [`redundancy.md`](redundancy.md), 컴포넌트 분리 경위는
 [`offload-components.md`](offload-components.md) 참고.

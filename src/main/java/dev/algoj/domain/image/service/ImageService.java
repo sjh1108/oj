@@ -44,6 +44,13 @@ public class ImageService {
     @Value("${app.s3.region}")
     private String region;
 
+    // Base URL the uploaded object is served from. Empty → AWS S3's own
+    // virtual-host URL (the layout this project has always used). Set it when
+    // the bucket lives on an S3-compatible store or behind a CDN/custom domain,
+    // since those serve objects from a different host than the AWS pattern.
+    @Value("${app.s3.public-base-url:}")
+    private String publicBaseUrl = "";
+
     public UploadImageResponse upload(UploadImageRequest req) {
         S3Client s3 = s3ClientProvider.getIfAvailable();
         if (s3 == null || bucket.isBlank()) {
@@ -76,7 +83,13 @@ public class ImageService {
                         .build(),
                 RequestBody.fromBytes(data));
 
-        return new UploadImageResponse(
-                "https://%s.s3.%s.amazonaws.com/%s".formatted(bucket, region, key));
+        return new UploadImageResponse(publicUrl(key));
+    }
+
+    private String publicUrl(String key) {
+        if (publicBaseUrl == null || publicBaseUrl.isBlank()) {
+            return "https://%s.s3.%s.amazonaws.com/%s".formatted(bucket, region, key);
+        }
+        return "%s/%s".formatted(publicBaseUrl.replaceAll("/+$", ""), key);
     }
 }

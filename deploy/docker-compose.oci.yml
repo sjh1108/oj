@@ -1,0 +1,66 @@
+# Stateful stack for the single-box deployment (Oracle Cloud Ampere).
+#
+# The AWS layout spread these out — MySQL on RDS, RabbitMQ on the JJ box — for
+# a 2GB box that could not hold them. The Ampere instance has 12GB, so both
+# come back next to the API and the whole service is one box again.
+# Migration steps: deploy/oracle-cloud-migration.md
+#
+#   cd /opt/algoj
+#   docker compose -f docker-compose.oci.yml --env-file .env up -d
+#   docker compose -f docker-compose.oci.yml ps
+#
+# Neither service publishes its port to the host: the API container joins this
+# same network (deploy-api.sh attaches it automatically when it exists) and
+# reaches them by service name. So .env on this box sets DB_HOST=mysql and
+# RABBITMQ_HOST=rabbitmq — nothing on 3306/5672 is reachable from off-box.
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: algoj-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: Asia/Seoul
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      # 12GB box: the working set fits in RAM many times over, so give InnoDB a
+      # real buffer pool instead of the 128M the old 2GB box had to live with.
+      - --innodb-buffer-pool-size=1G
+      - --max-connections=100
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    # Plain (non-management) alpine image: ~100MB RSS. Add the queue UI by
+    # switching to rabbitmq:4-management-alpine and publishing 127.0.0.1:15672.
+    image: rabbitmq:4-alpine
+    container_name: algoj-rabbitmq
+    restart: unless-stopped
+    mem_limit: 512m
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    volumes:
+      # Durable queue data — queued judge jobs survive a broker restart.
+      - ./rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+# Fixed name (not the compose-generated <project>_default) so deploy-api.sh can
+# look it up and attach the API container to it.
+networks:
+  default:
+    name: algoj-net
