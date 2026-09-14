@@ -93,6 +93,43 @@ Judge0 설정도 이제 쓰지 않는다(자체 채점기로 대체). 회수할 
 - 켠 직후 **수동 스냅샷을 하나 만들어두면 안전망이 된다.** 덤프를 뜨다 실수해도 원본이 남는다.
 - 보안그룹은 건드리지 않는다. OJ 안에서 덤프를 뜨므로 기존 허용 규칙 그대로 동작한다.
 
+### RDS가 `inaccessible-encryption-credentials-recoverable` 이면
+
+계정이 미납으로 정지되는 동안 **KMS 키 사용 권한(grant)이 회수돼** 생기는 상태다.
+데이터가 사라진 것이 아니라 잠긴 것이고, 이름 끝의 `-recoverable`이 그 뜻이다.
+
+확인은 이 순서로 한다. **키가 지워졌다고 먼저 단정하지 않는다.**
+
+1. RDS → 해당 인스턴스 → **구성** 탭에서 암호화에 쓰인 KMS 키를 본다.
+2. KMS 콘솔에서 그 키를 찾는다. 기본 설정이면 **AWS 관리형 키**(`aws/rds`)이므로
+   **고객 관리형 키 목록에는 나오지 않는다** — 목록이 비었다고 놀라지 말고 옆 탭을 본다.
+   키 상태가 `활성화됨`이면 키는 멀쩡하고 계정 쪽 문제다.
+3. 미납 잔액이 남아 있으면 결제한다. 계정이 정상으로 돌아와야 권한이 복구된다.
+4. **인스턴스를 시작해 본다.** 권한이 풀렸으면 그대로 `시작 중` → `사용 가능`으로 올라온다.
+   유료 전환 직후라면 반영에 시간이 걸리므로, 안 되면 하루 뒤 다시 시도한다.
+5. 그래도 안 되면 지원 케이스를 연다. 기술 문의가 아니라 **계정·결제 문의**라
+   Basic 플랜에서도 무료다.
+
+> 시작 버튼을 눌렀는데 *"다음 상태 중 하나가 아니라서 시작할 수 없다"* 는 오류가 나오면
+> **이미 시작되고 있다는 뜻이다.** 콘솔 요약 패널이 옛 상태를 들고 있을 뿐이니 새로고침한다.
+
+**이 상태에서 인스턴스를 삭제하면 안 된다.** 복구할 수 있는 데이터까지 사라진다.
+
+### OJ를 켠 직후 SSH가 안 되는 건 정상일 수 있다
+
+부팅하면서 `restart: unless-stopped`가 붙은 옛 컨테이너가 한꺼번에 올라온다. 2GB 박스에서
+JVM이 기동하면 메모리가 바닥나 sshd까지 응답을 못 한다(`README.md`의 스왑 스래싱 기록과 같은
+현상). 브라우저 SSH도 `UPSTREAM_ERROR`로 끊긴다. **5~10분 기다렸다 다시 붙는다.**
+
+끝내 못 들어가면: 인스턴스를 정지 → 스냅샷 → 그 스냅샷으로 **더 큰 플랜**의 인스턴스를 만들되
+**시작 스크립트**에 아래를 넣는다. 옛 컨테이너도 cron도 아예 뜨지 않는 깨끗한 박스가 된다.
+
+```bash
+#!/bin/bash
+systemctl disable --now cron
+systemctl disable --now docker
+```
+
 ### S3 — 켜고 말고가 없다
 
 인스턴스가 아니므로 언제든 받을 수 있고 시작 비용도 없다. 시작 전에 정할 것은
@@ -133,11 +170,20 @@ SSH 키는 **그 박스의 것**이다(새 Oracle 박스 키와 다르다). Ligh
 cd /opt/algoj
 HOST="$(grep -m1 '^DB_HOST=' .env | cut -d= -f2-)"
 PW="$(grep -m1 '^DB_PASSWORD=' .env | cut -d= -f2-)"
+# 연결부터 확인한다 — 큰 덤프를 뜨다 실패하는 것보다 싸게 먹힌다
+MYSQL_PWD="$PW" mysql -h "$HOST" -u algoj -e \
+  "SELECT COUNT(*) problems FROM problems; SELECT COUNT(*) submissions FROM submissions;" algoj
+
 MYSQL_PWD="$PW" mysqldump -h "$HOST" -u algoj \
-  --single-transaction --routines --default-character-set=utf8mb4 \
+  --single-transaction --routines --no-tablespaces --set-gtid-purged=OFF \
+  --default-character-set=utf8mb4 \
   algoj > ~/algoj-$(date +%F).sql
 ls -lh ~/algoj-*.sql
 ```
+
+플래그 두 개는 빼면 실제로 막힌다. `--no-tablespaces`가 없으면 RDS에서
+`you need the PROCESS privilege` 로 거절당하고, `--set-gtid-purged=OFF`가 없으면 덤프 앞에
+`SET @@GLOBAL.GTID_PURGED` 가 붙어 **다른 서버로 import 할 때 실패한다.**
 
 그다음 로컬로 내려받아 새 박스로 올린다(브라우저 SSH만 쓸 수 있으면 Lightsail 콘솔의
 파일 다운로드 기능을 쓰거나, 덤프를 gzip 해서 S3에 올렸다가 받는다):
@@ -161,9 +207,24 @@ aws rds delete-db-instance --db-instance-identifier algoj-recover --skip-final-s
 덤프가 비었거나 몇 KB밖에 안 되면 잘못된 것이다 — 5단계로 넘어가기 전에 확인한다:
 
 ```bash
-grep -c 'INSERT INTO' algoj-*.sql
-grep -o 'INSERT INTO `[a-z_]*`' algoj-*.sql | sort | uniq -c
+ls -lh ~/algoj-*.sql
+grep -o 'INSERT INTO `[a-z_]*`' ~/algoj-*.sql | sort | uniq -c
+# 한글이 깨지지 않았는지. LC_ALL 없이 [가-힣] 를 쓰면 grep 이 로케일 때문에 거부한다
+LC_ALL=C.UTF-8 grep -m1 -oP '\p{Hangul}{2,}' ~/algoj-*.sql
 ```
+
+테이블마다 INSERT 문이 하나씩만 보이는 것은 정상이다 — mysqldump가 행을 묶어 쓰고,
+`max_allowed_packet`을 넘을 때만 쪼갠다. 테스트 데이터가 큰 `test_cases`만 수백 개로 갈린다.
+
+**전송 전에 압축한다.** SQL은 압축률이 높아 수백 MB가 수십 MB가 된다:
+
+```bash
+gzip -9 ~/algoj-$(date +%F).sql && ls -lh ~/algoj-*.sql.gz
+sha256sum ~/algoj-*.sql.gz
+```
+
+받은 뒤 해시를 대조한다(윈도면 `Get-FileHash -Algorithm SHA256`). **해시가 맞으면
+AWS에서 가져올 것은 다 가져온 것이다.**
 
 ## 4단계 — 지문 이미지: 버킷을 유지할지 결정
 
@@ -265,7 +326,21 @@ aws lightsail delete-instance --instance-name <이름>
 
 ## 데이터가 없을 때
 
-- **DB를 못 건졌다** — 문제는 `.md` 파일로 다시 업로드하면 복구된다(생성기 양식이면
+- **RDS를 못 건졌다** — 그 박스에 **RDS 이전 전의 MySQL 데이터가 남아 있을 수 있다.**
+  `/opt/algoj/mysql-data`가 그것이다(이전할 때 지우지 않았다). 최신은 아니지만 문제와 계정을
+  상당 부분 살릴 수 있다. 그 박스의 `.env`에 있는 root 암호로 컨테이너를 씌워 덤프를 뜬다:
+
+  ```bash
+  PW="$(grep -m1 '^MYSQL_ROOT_PASSWORD=' /opt/algoj/.env | cut -d= -f2-)"
+  docker run -d --rm --name recover-mysql -e MYSQL_ROOT_PASSWORD="$PW" \
+    -v /opt/algoj/mysql-data:/var/lib/mysql mysql:8.0
+  sleep 30
+  docker exec -e MYSQL_PWD="$PW" recover-mysql mysqldump -uroot \
+    --single-transaction --default-character-set=utf8mb4 algoj > ~/algoj-legacy.sql
+  docker stop recover-mysql
+  ```
+
+- **DB를 아예 못 건졌다** — 문제는 `.md` 파일로 다시 업로드하면 복구된다(생성기 양식이면
   시드가 같아 테스트데이터까지 바이트 단위로 재현된다). 제출 기록과 계정은 복구 불가이므로
   스터디원에게 재가입을 안내한다.
 - **이미지를 못 건졌다** — 지문의 이미지 URL이 깨진다. 간단한 도형·다이어그램은 인라인
