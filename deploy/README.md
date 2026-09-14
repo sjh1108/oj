@@ -50,6 +50,11 @@ AWS 무료 크레딧이 끊기면서 네 조각(OJ·EOJ·JJ·RDS)으로 흩어�
 cp /opt/algoj/repo/deploy/docker-compose.{oci,judge,bot}.yml /opt/algoj/
 ```
 
+> ⚠️ **`--remove-orphans`를 붙이지 말 것.** compose 파일 세 개가 같은 디렉터리에 있어
+> 프로젝트 이름을 공유하므로, 하나를 올릴 때마다 나머지 컨테이너를 "orphan"이라고 경고한다.
+> 경고 자체는 무해하지만, 안내대로 `--remove-orphans`를 붙이면 **MySQL·브로커·채점기가 함께
+> 삭제된다.** 데이터는 bind mount라 남지만 서비스는 내려간다. 경고는 그냥 무시한다.
+
 ## 박스 1회 준비 (새 API 박스를 추가할 때)
 
 ```bash
