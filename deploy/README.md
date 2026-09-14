@@ -1,40 +1,53 @@
-# Deployment — OJ + EOJ 이중화
+# Deployment — Oracle Cloud 단일 박스
 
-> ⚠️ **이 문서는 AWS 구성(OJ·EOJ·JJ·RDS) 기준이다.** AWS 무료 크레딧이 소진돼 이 구성은 현재
-> 멈춰 있고, Oracle Cloud 단일 박스로 이전하는 중이다 →
-> [`oracle-cloud-migration.md`](oracle-cloud-migration.md).
-> 아래 절차(박스 준비·sudoers·Flyway·트러블슈팅)는 새 박스에서도 대부분 그대로 쓰이고,
-> 이중화(rolling) 부분만 단일 박스 blue-green으로 대체된다. 이전이 끝나면 이 문서를 갱신한다.
+모든 것이 **Oracle Cloud Ampere 한 박스(aarch64, 2 OCPU / 12GB)** 에서 돈다.
+AWS 무료 크레딧이 끊기면서 네 조각(OJ·EOJ·JJ·RDS)으로 흩어져 있던 구성을 여기로 합쳤다 —
+경위는 [`oracle-cloud-migration.md`](oracle-cloud-migration.md), 데이터 회수는
+[`aws-data-recovery.md`](aws-data-recovery.md).
 
-API는 **두 박스(OJ·EOJ)에서 동시에** 돌고, DB·브로커·샌드박스는 밖으로 빼놨다.
-설계 배경은 [`redundancy.md`](redundancy.md), 컴포넌트 분리 경위는
-[`offload-components.md`](offload-components.md) 참고.
-
-| 박스 | 역할 | 컨테이너 |
+| 컴포넌트 | 어디에 | 비고 |
 |---|---|---|
-| **OJ** (Lightsail, Ubuntu 22.04) | nginx(TLS 종단 + LB) · API #1 · Discord 봇 · **롤링 배포 지휘자** | `algoj-api`(127.0.0.1:8081), `algoj-bot` |
-| **EOJ** (EC2, 사설망) | API #2 | `algoj-api`(0.0.0.0:8080) |
-| **JJ** (EC2, 사설망) | Judge0 :2358 · RabbitMQ :5672 | `algoj-rabbitmq` 외 Judge0 스택 |
-| **RDS** | MySQL 8 (스키마는 Flyway가 관리) | — |
-| **S3** | 지문 이미지 ([`aws-s3-images.md`](aws-s3-images.md)) | — |
+| nginx | 호스트 | TLS 종단 + blue-green 업스트림. 배포 중에도 안 내려간다 |
+| API | `algoj-api-blue` / `-green` | 127.0.0.1:8081·8082, `deploy-api.sh`가 직접 관리 |
+| MySQL 8 · RabbitMQ 4 | `docker-compose.oci.yml` | `algoj-net` 안에서만 — **호스트 포트를 열지 않는다** |
+| 채점기 | `docker-compose.judge.yml` | Judge0 대체 ([`judge-runner/`](../judge-runner/README.md)) |
+| Discord 봇 | `docker-compose.bot.yml` | host network로 nginx 내부 진입점(:8080) 사용 |
 
 프론트엔드는 Vercel에 따로 배포된다(이 문서 범위 밖).
 
-> nginx는 OJ에만 있고 **배포 중에도 내려가지 않는다** — 교체되는 건 API 컨테이너뿐이다.
-> API는 compose 서비스가 아니라 `deploy-api-single.sh`가 직접 관리한다. 박스에 남은 compose는
-> OJ의 봇(`docker-compose.bot.yml`)과 JJ의 브로커(`docker-compose.jj.yml`)뿐이다.
-> (`deploy/docker-compose.yml`은 **로컬 개발용 MySQL**이라 운영 박스와 무관하다.)
+> **docker의 포트 publish는 iptables INPUT 체인을 우회한다.** DB·브로커에 `-p`를 붙이는 순간
+> 방화벽 설정과 무관하게 인터넷에 열린다. 그래서 두 서비스는 도커 네트워크 안에서만 통신하고,
+> API도 루프백에만 바인딩한다.
+>
+> 아래 문서에서 **OJ·EOJ 두 박스 교차 롤링**을 다루는 절(무중단 배포 항목)은 AWS 시절의 기록이다.
+> 지금은 한 박스 blue-green(`deploy-api.sh`)을 쓰고, CD의 `DEPLOY_TOPOLOGY`가 비어 있으면
+> 그 경로로 간다. 박스가 다시 둘이 되면 `rolling`으로 되살릴 수 있어 절차를 남겨 뒀다.
 
 ## 박스 레이아웃
 
+박스에 있어야 할 것들이다. **compose 파일은 저장소 클론에서 복사해 와야 한다** —
+`docker compose -f <파일>`은 현재 디렉터리에서 찾으므로, 없으면
+`no such file or directory`로 막힌다.
+
 ```
-/opt/algoj/                     # OJ · EOJ 공통
-├── .env                        # 비밀 (chmod 600) — 두 박스가 같은 값, JWT_SECRET 공유 필수
-├── deploy-api-single.sh        # 박스 1개 무겹침 배포 (CD가 매 배포마다 갱신)
-├── nginx/render-upstream.sh    # OJ 전용 — upstream 드레인/복원
-├── rolling-deploy.sh           # OJ 전용 — 두 박스 교차 롤링 지휘
-├── eoj.pem                     # OJ 전용 — EOJ 사설 SSH 키 (chmod 600)
-└── docker-compose.bot.yml      # OJ 전용 — Discord 봇
+/opt/algoj/
+├── .env                        # 비밀 (chmod 600)
+├── repo/                       # 이 저장소 클론 — compose 파일과 스크립트의 출처
+├── deploy-api.sh               # 한 박스 blue-green 배포 (CD가 매 배포마다 갱신)
+├── docker-compose.oci.yml      # MySQL + RabbitMQ
+├── docker-compose.judge.yml    # 채점기
+├── docker-compose.bot.yml      # Discord 봇
+├── mysql-data/                 # MySQL 데이터
+├── rabbitmq-data/              # 브로커 데이터 (durable 큐)
+├── judge-work/                 # 채점 작업 디렉터리 (실행 후 비워진다)
+├── rolling-deploy.sh           # 두 박스 구성용 — 지금은 안 쓴다 (CD가 같이 복사)
+├── deploy-api-single.sh        # 〃
+└── nginx/render-upstream.sh    # 〃
+```
+
+```bash
+# 새로 세울 때 compose 파일 세 개를 한 번에
+cp /opt/algoj/repo/deploy/docker-compose.{oci,judge,bot}.yml /opt/algoj/
 ```
 
 ## 박스 1회 준비 (새 API 박스를 추가할 때)
@@ -140,7 +153,10 @@ bash nginx/render-upstream.sh none          # 둘 다 활성으로 복원
 
 ---
 
-## 무중단 배포 (OJ + EOJ 교차 롤링)
+## 무중단 배포 (OJ + EOJ 교차 롤링) — AWS 시절 기록
+
+> 현재 구성은 **한 박스 blue-green**이다(`deploy-api.sh`). 아래는 박스가 둘이던 시절의 절차로,
+> `DEPLOY_TOPOLOGY=rolling`을 설정하면 그대로 다시 쓸 수 있다.
 
 **박스당 JVM 1개**가 원칙이다. 한 박스에서 블루-그린으로 JVM 2개를 겹치면 ≈2GB 박스가 스왑을
 갈아 오히려 무중단이 깨졌기 때문에, 겹침 대신 **두 박스를 번갈아** 교체한다.
