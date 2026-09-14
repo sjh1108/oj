@@ -40,6 +40,103 @@ aws lightsail get-instance-snapshots --query 'instanceSnapshots[].[name,createdA
 - **스냅샷만 있다** → 스냅샷에서 잠깐 복원해 꺼내고 바로 지운다.
 - **둘 다 없다** → 그 항목은 포기한다. 아래 "없을 때" 절을 본다.
 
+## 1.5단계 — 인스턴스를 켜기 전에 (박스별)
+
+**켜야 하는 건 OJ 하나뿐이다.** EOJ와 JJ는 상태가 없어 켤 이유가 없고, 켜는 만큼 돈이다.
+
+### OJ (Lightsail) — 켠다
+
+유일하게 필요한 박스다. 이유가 둘이다: `.env`가 여기 있고, **RDS에 닿을 수 있는 경로가 여기뿐**이다
+(RDS는 공개 접근이 막혀 있고 보안그룹이 이 박스만 허용한다).
+
+켜기 전에 준비할 것:
+
+- **접속 수단** — SSH 키를 못 찾아도 된다. Lightsail 콘솔의 브라우저 SSH로 들어갈 수 있다.
+- **부팅 직후 붙여넣을 명령을 미리 복사해둔다** (아래). 켜자마자 해야 하는 일이 있다.
+- ⚠️ **DuckDNS가 되돌아갈 수 있다.** 이 박스에 DNS 갱신 cron이 있었다면, 켜지고 몇 분 안에
+  `algoj.duckdns.org`가 옛 IP를 가리키게 되고 **지금 돌고 있는 서비스가 죽는다.**
+  가능하면 DuckDNS에서 토큰을 재발급해 옛 cron의 요청이 인증 실패로 무시되게 만드는 게 가장 확실하다
+  (재발급하면 새 박스의 cron에도 새 토큰을 넣어야 한다). 그게 안 되면 켜자마자 cron부터 멈춘다.
+- ⚠️ **옛 컨테이너가 자동으로 뜬다.** API와 디스코드 봇이 `restart: unless-stopped`로 올라온다.
+  봇이 옛 토큰으로 디스코드에 붙어 스터디원에게 **옛 데이터로 답하기 시작한다.** 같이 멈춘다.
+
+부팅 후 접속하자마자, 순서대로:
+
+```bash
+sudo systemctl stop cron && crontab -l        # DNS 갱신 cron이 있었는지 눈으로 확인
+docker stop $(docker ps -q) 2>/dev/null       # 옛 API·봇 정지
+cat /opt/algoj/.env                            # 브라우저 SSH면 화면에서 바로 복사
+which mysqldump || sudo apt-get install -y mysql-client
+```
+
+다른 창에서 DNS를 지켜본다 — 작업 내내 새 박스를 가리켜야 한다:
+
+```bash
+watch -n 30 'getent hosts algoj.duckdns.org'
+```
+
+### EOJ (EC2) — 켜지 않는다
+
+API 두 번째 인스턴스였을 뿐 상태가 없다. `.env`는 OJ와 같은 값이므로,
+**OJ에서 회수에 실패했을 때만** 예비로 켠다.
+
+### JJ (EC2) — 켜지 않는다
+
+Judge0와 RabbitMQ가 있던 박스다. 큐에 남은 메시지는 새 DB 기준으로 의미가 없고,
+Judge0 설정도 이제 쓰지 않는다(자체 채점기로 대체). 회수할 것이 없다.
+
+### RDS — 상태부터 확인한다
+
+- `stopped`라면 시작한다. 단 **정지된 RDS는 7일이 지나면 AWS가 자동으로 켠다** —
+  이미 켜져서 과금 중일 수도 있으니 먼저 상태를 본다.
+- 엔드포인트 주소를 따로 찾을 필요 없다. OJ의 `.env` `DB_HOST`에 있다.
+- 켠 직후 **수동 스냅샷을 하나 만들어두면 안전망이 된다.** 덤프를 뜨다 실수해도 원본이 남는다.
+- 보안그룹은 건드리지 않는다. OJ 안에서 덤프를 뜨므로 기존 허용 규칙 그대로 동작한다.
+
+### RDS가 `inaccessible-encryption-credentials-recoverable` 이면
+
+계정이 미납으로 정지되는 동안 **KMS 키 사용 권한(grant)이 회수돼** 생기는 상태다.
+데이터가 사라진 것이 아니라 잠긴 것이고, 이름 끝의 `-recoverable`이 그 뜻이다.
+
+확인은 이 순서로 한다. **키가 지워졌다고 먼저 단정하지 않는다.**
+
+1. RDS → 해당 인스턴스 → **구성** 탭에서 암호화에 쓰인 KMS 키를 본다.
+2. KMS 콘솔에서 그 키를 찾는다. 기본 설정이면 **AWS 관리형 키**(`aws/rds`)이므로
+   **고객 관리형 키 목록에는 나오지 않는다** — 목록이 비었다고 놀라지 말고 옆 탭을 본다.
+   키 상태가 `활성화됨`이면 키는 멀쩡하고 계정 쪽 문제다.
+3. 미납 잔액이 남아 있으면 결제한다. 계정이 정상으로 돌아와야 권한이 복구된다.
+4. **인스턴스를 시작해 본다.** 권한이 풀렸으면 그대로 `시작 중` → `사용 가능`으로 올라온다.
+   유료 전환 직후라면 반영에 시간이 걸리므로, 안 되면 하루 뒤 다시 시도한다.
+5. 그래도 안 되면 지원 케이스를 연다. 기술 문의가 아니라 **계정·결제 문의**라
+   Basic 플랜에서도 무료다.
+
+> 시작 버튼을 눌렀는데 *"다음 상태 중 하나가 아니라서 시작할 수 없다"* 는 오류가 나오면
+> **이미 시작되고 있다는 뜻이다.** 콘솔 요약 패널이 옛 상태를 들고 있을 뿐이니 새로고침한다.
+
+**이 상태에서 인스턴스를 삭제하면 안 된다.** 복구할 수 있는 데이터까지 사라진다.
+
+### OJ를 켠 직후 SSH가 안 되는 건 정상일 수 있다
+
+부팅하면서 `restart: unless-stopped`가 붙은 옛 컨테이너가 한꺼번에 올라온다. 2GB 박스에서
+JVM이 기동하면 메모리가 바닥나 sshd까지 응답을 못 한다(`README.md`의 스왑 스래싱 기록과 같은
+현상). 브라우저 SSH도 `UPSTREAM_ERROR`로 끊긴다. **5~10분 기다렸다 다시 붙는다.**
+
+끝내 못 들어가면: 인스턴스를 정지 → 스냅샷 → 그 스냅샷으로 **더 큰 플랜**의 인스턴스를 만들되
+**시작 스크립트**에 아래를 넣는다. 옛 컨테이너도 cron도 아예 뜨지 않는 깨끗한 박스가 된다.
+
+```bash
+#!/bin/bash
+systemctl disable --now cron
+systemctl disable --now docker
+```
+
+### S3 — 켜고 말고가 없다
+
+인스턴스가 아니므로 언제든 받을 수 있고 시작 비용도 없다. 시작 전에 정할 것은
+버킷을 남길지 옮길지뿐이다(4단계).
+
+---
+
 ## 2단계 — `.env` 회수 (가장 급함)
 
 ```bash
@@ -64,13 +161,36 @@ SSH 키는 **그 박스의 것**이다(새 Oracle 박스 키와 다르다). Ligh
 
 ## 3단계 — DB 덤프
 
-**인스턴스가 살아 있으면**, 새 박스에서 바로 뜬다(RDS를 공개로 열 필요 없이,
-보안그룹 3306에 새 박스 공인 IP를 임시로 허용):
+**인스턴스가 살아 있으면**, 덤프는 **OJ 박스 안에서** 뜬다. RDS는 공개 접근이 막혀 있고
+보안그룹이 OJ에서 오는 트래픽만 허용하므로(`offload-components.md`), 새 박스나 집 PC에서는
+아예 닿지 않는다. 보안그룹을 열어 우회하지 말고 경로를 그대로 쓴다.
 
 ```bash
-mysqldump -h <rds-endpoint> -u algoj -p \
-  --single-transaction --routines --default-character-set=utf8mb4 \
-  algoj > algoj-$(date +%F).sql
+# OJ 박스에서 — 엔드포인트와 비밀번호는 그 박스의 .env 에 있다
+cd /opt/algoj
+HOST="$(grep -m1 '^DB_HOST=' .env | cut -d= -f2-)"
+PW="$(grep -m1 '^DB_PASSWORD=' .env | cut -d= -f2-)"
+# 연결부터 확인한다 — 큰 덤프를 뜨다 실패하는 것보다 싸게 먹힌다
+MYSQL_PWD="$PW" mysql -h "$HOST" -u algoj -e \
+  "SELECT COUNT(*) problems FROM problems; SELECT COUNT(*) submissions FROM submissions;" algoj
+
+MYSQL_PWD="$PW" mysqldump -h "$HOST" -u algoj \
+  --single-transaction --routines --no-tablespaces --set-gtid-purged=OFF \
+  --default-character-set=utf8mb4 \
+  algoj > ~/algoj-$(date +%F).sql
+ls -lh ~/algoj-*.sql
+```
+
+플래그 두 개는 빼면 실제로 막힌다. `--no-tablespaces`가 없으면 RDS에서
+`you need the PROCESS privilege` 로 거절당하고, `--set-gtid-purged=OFF`가 없으면 덤프 앞에
+`SET @@GLOBAL.GTID_PURGED` 가 붙어 **다른 서버로 import 할 때 실패한다.**
+
+그다음 로컬로 내려받아 새 박스로 올린다(브라우저 SSH만 쓸 수 있으면 Lightsail 콘솔의
+파일 다운로드 기능을 쓰거나, 덤프를 gzip 해서 S3에 올렸다가 받는다):
+
+```bash
+scp ubuntu@<OJ IP>:~/algoj-*.sql .
+scp algoj-*.sql ubuntu@<새 박스 IP>:/opt/algoj/
 ```
 
 **스냅샷만 있으면** `db.t3.micro`로 복원해 위를 그대로 하고, 덤프를 확보한 즉시 지운다:
@@ -87,9 +207,24 @@ aws rds delete-db-instance --db-instance-identifier algoj-recover --skip-final-s
 덤프가 비었거나 몇 KB밖에 안 되면 잘못된 것이다 — 5단계로 넘어가기 전에 확인한다:
 
 ```bash
-grep -c 'INSERT INTO' algoj-*.sql
-grep -o 'INSERT INTO `[a-z_]*`' algoj-*.sql | sort | uniq -c
+ls -lh ~/algoj-*.sql
+grep -o 'INSERT INTO `[a-z_]*`' ~/algoj-*.sql | sort | uniq -c
+# 한글이 깨지지 않았는지. LC_ALL 없이 [가-힣] 를 쓰면 grep 이 로케일 때문에 거부한다
+LC_ALL=C.UTF-8 grep -m1 -oP '\p{Hangul}{2,}' ~/algoj-*.sql
 ```
+
+테이블마다 INSERT 문이 하나씩만 보이는 것은 정상이다 — mysqldump가 행을 묶어 쓰고,
+`max_allowed_packet`을 넘을 때만 쪼갠다. 테스트 데이터가 큰 `test_cases`만 수백 개로 갈린다.
+
+**전송 전에 압축한다.** SQL은 압축률이 높아 수백 MB가 수십 MB가 된다:
+
+```bash
+gzip -9 ~/algoj-$(date +%F).sql && ls -lh ~/algoj-*.sql.gz
+sha256sum ~/algoj-*.sql.gz
+```
+
+받은 뒤 해시를 대조한다(윈도면 `Get-FileHash -Algorithm SHA256`). **해시가 맞으면
+AWS에서 가져올 것은 다 가져온 것이다.**
 
 ## 4단계 — 지문 이미지: 버킷을 유지할지 결정
 
@@ -191,7 +326,21 @@ aws lightsail delete-instance --instance-name <이름>
 
 ## 데이터가 없을 때
 
-- **DB를 못 건졌다** — 문제는 `.md` 파일로 다시 업로드하면 복구된다(생성기 양식이면
+- **RDS를 못 건졌다** — 그 박스에 **RDS 이전 전의 MySQL 데이터가 남아 있을 수 있다.**
+  `/opt/algoj/mysql-data`가 그것이다(이전할 때 지우지 않았다). 최신은 아니지만 문제와 계정을
+  상당 부분 살릴 수 있다. 그 박스의 `.env`에 있는 root 암호로 컨테이너를 씌워 덤프를 뜬다:
+
+  ```bash
+  PW="$(grep -m1 '^MYSQL_ROOT_PASSWORD=' /opt/algoj/.env | cut -d= -f2-)"
+  docker run -d --rm --name recover-mysql -e MYSQL_ROOT_PASSWORD="$PW" \
+    -v /opt/algoj/mysql-data:/var/lib/mysql mysql:8.0
+  sleep 30
+  docker exec -e MYSQL_PWD="$PW" recover-mysql mysqldump -uroot \
+    --single-transaction --default-character-set=utf8mb4 algoj > ~/algoj-legacy.sql
+  docker stop recover-mysql
+  ```
+
+- **DB를 아예 못 건졌다** — 문제는 `.md` 파일로 다시 업로드하면 복구된다(생성기 양식이면
   시드가 같아 테스트데이터까지 바이트 단위로 재현된다). 제출 기록과 계정은 복구 불가이므로
   스터디원에게 재가입을 안내한다.
 - **이미지를 못 건졌다** — 지문의 이미지 URL이 깨진다. 간단한 도형·다이어그램은 인라인
