@@ -40,6 +40,66 @@ aws lightsail get-instance-snapshots --query 'instanceSnapshots[].[name,createdA
 - **스냅샷만 있다** → 스냅샷에서 잠깐 복원해 꺼내고 바로 지운다.
 - **둘 다 없다** → 그 항목은 포기한다. 아래 "없을 때" 절을 본다.
 
+## 1.5단계 — 인스턴스를 켜기 전에 (박스별)
+
+**켜야 하는 건 OJ 하나뿐이다.** EOJ와 JJ는 상태가 없어 켤 이유가 없고, 켜는 만큼 돈이다.
+
+### OJ (Lightsail) — 켠다
+
+유일하게 필요한 박스다. 이유가 둘이다: `.env`가 여기 있고, **RDS에 닿을 수 있는 경로가 여기뿐**이다
+(RDS는 공개 접근이 막혀 있고 보안그룹이 이 박스만 허용한다).
+
+켜기 전에 준비할 것:
+
+- **접속 수단** — SSH 키를 못 찾아도 된다. Lightsail 콘솔의 브라우저 SSH로 들어갈 수 있다.
+- **부팅 직후 붙여넣을 명령을 미리 복사해둔다** (아래). 켜자마자 해야 하는 일이 있다.
+- ⚠️ **DuckDNS가 되돌아갈 수 있다.** 이 박스에 DNS 갱신 cron이 있었다면, 켜지고 몇 분 안에
+  `algoj.duckdns.org`가 옛 IP를 가리키게 되고 **지금 돌고 있는 서비스가 죽는다.**
+  가능하면 DuckDNS에서 토큰을 재발급해 옛 cron의 요청이 인증 실패로 무시되게 만드는 게 가장 확실하다
+  (재발급하면 새 박스의 cron에도 새 토큰을 넣어야 한다). 그게 안 되면 켜자마자 cron부터 멈춘다.
+- ⚠️ **옛 컨테이너가 자동으로 뜬다.** API와 디스코드 봇이 `restart: unless-stopped`로 올라온다.
+  봇이 옛 토큰으로 디스코드에 붙어 스터디원에게 **옛 데이터로 답하기 시작한다.** 같이 멈춘다.
+
+부팅 후 접속하자마자, 순서대로:
+
+```bash
+sudo systemctl stop cron && crontab -l        # DNS 갱신 cron이 있었는지 눈으로 확인
+docker stop $(docker ps -q) 2>/dev/null       # 옛 API·봇 정지
+cat /opt/algoj/.env                            # 브라우저 SSH면 화면에서 바로 복사
+which mysqldump || sudo apt-get install -y mysql-client
+```
+
+다른 창에서 DNS를 지켜본다 — 작업 내내 새 박스를 가리켜야 한다:
+
+```bash
+watch -n 30 'getent hosts algoj.duckdns.org'
+```
+
+### EOJ (EC2) — 켜지 않는다
+
+API 두 번째 인스턴스였을 뿐 상태가 없다. `.env`는 OJ와 같은 값이므로,
+**OJ에서 회수에 실패했을 때만** 예비로 켠다.
+
+### JJ (EC2) — 켜지 않는다
+
+Judge0와 RabbitMQ가 있던 박스다. 큐에 남은 메시지는 새 DB 기준으로 의미가 없고,
+Judge0 설정도 이제 쓰지 않는다(자체 채점기로 대체). 회수할 것이 없다.
+
+### RDS — 상태부터 확인한다
+
+- `stopped`라면 시작한다. 단 **정지된 RDS는 7일이 지나면 AWS가 자동으로 켠다** —
+  이미 켜져서 과금 중일 수도 있으니 먼저 상태를 본다.
+- 엔드포인트 주소를 따로 찾을 필요 없다. OJ의 `.env` `DB_HOST`에 있다.
+- 켠 직후 **수동 스냅샷을 하나 만들어두면 안전망이 된다.** 덤프를 뜨다 실수해도 원본이 남는다.
+- 보안그룹은 건드리지 않는다. OJ 안에서 덤프를 뜨므로 기존 허용 규칙 그대로 동작한다.
+
+### S3 — 켜고 말고가 없다
+
+인스턴스가 아니므로 언제든 받을 수 있고 시작 비용도 없다. 시작 전에 정할 것은
+버킷을 남길지 옮길지뿐이다(4단계).
+
+---
+
 ## 2단계 — `.env` 회수 (가장 급함)
 
 ```bash
@@ -64,13 +124,27 @@ SSH 키는 **그 박스의 것**이다(새 Oracle 박스 키와 다르다). Ligh
 
 ## 3단계 — DB 덤프
 
-**인스턴스가 살아 있으면**, 새 박스에서 바로 뜬다(RDS를 공개로 열 필요 없이,
-보안그룹 3306에 새 박스 공인 IP를 임시로 허용):
+**인스턴스가 살아 있으면**, 덤프는 **OJ 박스 안에서** 뜬다. RDS는 공개 접근이 막혀 있고
+보안그룹이 OJ에서 오는 트래픽만 허용하므로(`offload-components.md`), 새 박스나 집 PC에서는
+아예 닿지 않는다. 보안그룹을 열어 우회하지 말고 경로를 그대로 쓴다.
 
 ```bash
-mysqldump -h <rds-endpoint> -u algoj -p \
+# OJ 박스에서 — 엔드포인트와 비밀번호는 그 박스의 .env 에 있다
+cd /opt/algoj
+HOST="$(grep -m1 '^DB_HOST=' .env | cut -d= -f2-)"
+PW="$(grep -m1 '^DB_PASSWORD=' .env | cut -d= -f2-)"
+MYSQL_PWD="$PW" mysqldump -h "$HOST" -u algoj \
   --single-transaction --routines --default-character-set=utf8mb4 \
-  algoj > algoj-$(date +%F).sql
+  algoj > ~/algoj-$(date +%F).sql
+ls -lh ~/algoj-*.sql
+```
+
+그다음 로컬로 내려받아 새 박스로 올린다(브라우저 SSH만 쓸 수 있으면 Lightsail 콘솔의
+파일 다운로드 기능을 쓰거나, 덤프를 gzip 해서 S3에 올렸다가 받는다):
+
+```bash
+scp ubuntu@<OJ IP>:~/algoj-*.sql .
+scp algoj-*.sql ubuntu@<새 박스 IP>:/opt/algoj/
 ```
 
 **스냅샷만 있으면** `db.t3.micro`로 복원해 위를 그대로 하고, 덤프를 확보한 즉시 지운다:
