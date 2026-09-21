@@ -33,6 +33,7 @@ function useCanView() {
 export default function AllSubmissionsPage() {
   const [page, setPage] = useState(0);
   const canView = useCanView();
+  const me = useAuthStore((s) => s.user);
 
   const list = useQuery({
     queryKey: ["all-submissions", page],
@@ -86,6 +87,8 @@ export default function AllSubmissionsPage() {
               )}
               {list.data.content.map((s) => {
                 const viewable = canView(s);
+                // 아이디가 비슷한 사람과 헷갈리지 않게 내 제출만 초록색으로.
+                const isMine = me?.username === s.username;
                 const idCell = viewable ? (
                   <Link
                     href={`/submissions/${s.id}`}
@@ -102,7 +105,11 @@ export default function AllSubmissionsPage() {
                     className={`border-t ${viewable ? "hover:bg-muted/40" : ""}`}
                   >
                     <td className="p-3">{idCell}</td>
-                    <td className="p-3">{s.username}</td>
+                    <td
+                      className={`p-3 ${isMine ? "text-green-500 font-medium" : ""}`}
+                    >
+                      {s.username}
+                    </td>
                     <td className="p-3">
                       <Link
                         href={`/problems/${s.problemId}`}
