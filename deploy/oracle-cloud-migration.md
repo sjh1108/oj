@@ -26,7 +26,7 @@ AWS 무료 크레딧이 소진되어 서비스가 멈췄다. 네 조각(OJ Light
 | 자동 (이 PR + CD) | 수동 (박스·콘솔) |
 |---|---|
 | API·봇 이미지를 **arm64로도** 빌드해 GHCR에 푸시 | OCI 인스턴스 정리(마크 서버 잔재 제거)·docker 설치 |
-| CD가 **단일 박스 blue-green**으로 배포 (`DEPLOY_TOPOLOGY` 미설정 시 기본) | `.env` 작성, `docker-compose.oci.yml` 기동 |
+| CD가 **단일 박스 blue-green**으로 배포 | `.env` 작성, `docker-compose.oci.yml` 기동 |
 | API 컨테이너가 `algoj-net`에 자동 합류 (DB_HOST=mysql 해석) | MySQL 데이터 적재(덤프 import) |
 | 12GB 박스 감지 시 힙 프로필 자동 상향 | nginx·certbot(TLS)·DuckDNS IP 재지정 |
 | S3 호환 스토리지 설정 지원(`S3_ENDPOINT` 등) | 이미지 버킷 생성·업로드, GitHub Secrets(SSH_HOST 등) 교체 |
@@ -59,8 +59,8 @@ free -m; df -h  # 12GB인지, 부트 볼륨 여유가 있는지
 
 ## 2단계 — AWS에 남은 데이터 구출 (시간이 걸린 일)
 
-> 이전은 끝났고 AWS 회수만 남았다면, 절차는 [`aws-data-recovery.md`](aws-data-recovery.md)에
-> 따로 정리해 뒀다 — 유료 전환·비용 가드·적재까지 한 번에 끝내는 순서다.
+> 실제 회수는 [`archive/aws-data-recovery.md`](archive/aws-data-recovery.md)의 절차로 끝냈다
+> (2026-09, AWS 리소스 정리까지 완료).
 
 크레딧 소진으로 **인스턴스가 정지**된 것과 **리소스가 삭제**된 것은 다르다. 콘솔에서 확인한다.
 
@@ -228,7 +228,7 @@ sudo certbot --nginx -d algoj.duckdns.org
 ```
 
 `deploy-api.sh`가 배포 때마다 `algoj-upstream.conf`를 blue/green 포트로 다시 쓰고 reload 하므로
-**손으로 고치지 않는다**. `render-upstream.sh`/`rolling-deploy.sh`는 두 박스 전용이라 여기선 안 쓴다.
+**손으로 고치지 않는다**.
 
 배포 스크립트가 `sudo nginx -t`·`sudo tee`를 무암호로 실행할 수 있어야 한다
 (`deploy/README.md`의 sudoers 항목 참고).
@@ -241,8 +241,8 @@ GitHub 저장소 설정에서:
 
 - **Secrets**: `SSH_HOST`(새 공인 IP), `SSH_USER`(보통 `ubuntu`), `SSH_KEY`(OCI 인스턴스 키),
   `SSH_PORT`(기본 22).
-- **Variables**: `DEPLOY_ENABLED=true`. `DEPLOY_TOPOLOGY`는 **비워 둔다** — 기본이 단일 박스
-  blue-green이다. (두 박스 구성이 다시 생기면 그때 `rolling`으로 설정한다.)
+- **Variables**: `DEPLOY_ENABLED=true`. CD는 단일 박스 blue-green으로만 배포한다
+  (예전 `DEPLOY_TOPOLOGY` 변수는 없어졌다 — 남아 있으면 지워도 된다).
 
 첫 배포는 `workflow_dispatch`로 수동 실행해 arm64 이미지가 제대로 뜨는지 본다:
 

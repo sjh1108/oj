@@ -212,30 +212,22 @@ jobs:
             core.setOutput("announce_b64",
               Buffer.from(JSON.stringify(payload), "utf8").toString("base64"));
 
-      # Copy the deploy toolchain to the API box:
-      #   deploy-api.sh        — single-box blue-green (default topology)
-      #   rolling-deploy.sh    — two-box orchestrator (DEPLOY_TOPOLOGY=rolling)
-      #   deploy-api-single.sh — per-box no-overlap deploy used by the rolling path
-      #   nginx/render-upstream.sh — drains one box at the nginx layer (rolling only)
-      - name: Copy deploy scripts to the API box
+      # Copy the blue-green deploy script to the box.
+      - name: Copy deploy script to the box
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          source: "deploy/deploy-api.sh,deploy/rolling-deploy.sh,deploy/deploy-api-single.sh,deploy/nginx/render-upstream.sh"
+          source: "deploy/deploy-api.sh"
           target: /opt/algoj/
           strip_components: 1
 
-      # Default topology: ONE box running everything (see
-      # deploy/oracle-cloud-migration.md). The box has RAM to spare, so
-      # blue-green overlaps the two JVMs and nginx flips between them —
-      # zero downtime without a second box.
+      # ONE box runs everything (see deploy/README.md). The box has RAM to
+      # spare, so blue-green overlaps the two JVMs and nginx flips between
+      # them — zero downtime without a second box.
       - name: Blue-green deploy (single box)
-        # success() is implicit only without an `if:` — spell it out, or a
-        # failed script copy would still fall through to a deploy.
-        if: ${{ success() && vars.DEPLOY_TOPOLOGY != 'rolling' }}
         uses: appleboy/ssh-action@v1.2.0
         env:
           IMAGE: ${{ env.IMAGE }}
@@ -255,35 +247,6 @@ jobs:
             fi
             chmod +x deploy-api.sh
             IMAGE="${IMAGE}:latest" bash deploy-api.sh
-
-      # Legacy two-box topology (OJ + EOJ on AWS). Kept for the case where a
-      # second API box comes back; set the repo variable DEPLOY_TOPOLOGY=rolling.
-      - name: Rolling deploy across OJ + EOJ
-        if: ${{ success() && vars.DEPLOY_TOPOLOGY == 'rolling' }}
-        uses: appleboy/ssh-action@v1.2.0
-        env:
-          IMAGE: ${{ env.IMAGE }}
-          GHCR_USER: ${{ github.actor }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          envs: IMAGE,GHCR_USER,GHCR_PAT
-          script: |
-            set -e
-            cd /opt/algoj
-            # Authenticate to GHCR (skip if the package is public — it is today,
-            # so EOJ pulls the same image without a login too).
-            if [ -n "$GHCR_PAT" ]; then
-              echo "$GHCR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            fi
-            chmod +x rolling-deploy.sh deploy-api-single.sh nginx/render-upstream.sh
-            # OJ conducts a zero-downtime rolling deploy: drain EOJ → deploy EOJ
-            # (over the private network) → restore → drain OJ → deploy OJ →
-            # restore. One box always serves; each box runs a single JVM.
-            IMAGE="${IMAGE}:latest" bash rolling-deploy.sh
 
       # Tell the Discord bot to announce the update (best-effort: an
       # absent/disabled bot must never fail the deploy).

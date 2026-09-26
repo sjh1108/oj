@@ -41,7 +41,7 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 
 - **무중단 배포는 한 박스 blue-green** — 새 컨테이너를 비어 있는 포트에 띄우고 `/api/health`가
   통과하면 nginx 업스트림을 갈아끼웁니다. 12GB라 JVM 두 개가 잠깐 겹쳐도 됩니다
-  (2GB 시절에는 스왑 때문에 불가능해 박스를 두 대로 나눴었습니다 → [`deploy/redundancy.md`](deploy/redundancy.md))
+  (2GB 시절에는 스왑 때문에 불가능해 박스를 두 대로 나눴었습니다 → [`deploy/archive/redundancy.md`](deploy/archive/redundancy.md))
 - **채점기는 자체 구현** — Judge0 공식 이미지가 amd64 전용이라 arm64에서 돌지 않아, 앱이 실제로
   쓰는 Judge0 API 두 개만 구현해 대체했습니다. 격리는 제출마다 새 컨테이너(네트워크 없음·
   capability 제거·읽기전용 루트·메모리/PID 상한)로 얻습니다 →
@@ -53,8 +53,7 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
   PENDING으로 남은 제출은 스위퍼가 1분 주기로 재적재합니다
 - DB 스키마는 **Flyway**(`src/main/resources/db/migration/`)가 관리하고 Hibernate는 `validate`만 수행합니다
 - 이전 경위는 [`deploy/oracle-cloud-migration.md`](deploy/oracle-cloud-migration.md),
-  AWS 시절의 이중화·컴포넌트 분리 기록은 [`deploy/redundancy.md`](deploy/redundancy.md)와
-  [`deploy/offload-components.md`](deploy/offload-components.md)에 남아 있습니다
+  AWS 시절의 이중화·컴포넌트 분리 기록은 [`deploy/archive/`](deploy/archive/README.md)에 남아 있습니다
 
 ## 기술 스택
 
@@ -75,11 +74,10 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 ├── judge-runner/         # 채점기 (Judge0 대체) — 서비스 + 샌드박스 이미지
 ├── discord-bot/          # Discord 봇 (연동/비밀번호/서버상태/배포공지)
 ├── deploy/               # 배포 자료 + 운영 가이드
-│   ├── rolling-deploy.sh #   OJ+EOJ 교차 롤링 배포 (OJ에서 지휘)
-│   ├── deploy-api-single.sh #  박스 1개 무겹침 배포 (nginx는 안 건드림)
-│   ├── nginx/            #   upstream 렌더링(드레인) · 내부 :8080 고정 진입점
-│   ├── judge0/           #   Judge0 박스 세팅 (PyPy 추가, 메모리 제한)
-│   └── docker-compose*.yml # 로컬 인프라 · JJ RabbitMQ · Discord 봇
+│   ├── deploy-api.sh     #   한 박스 blue-green 배포 (CD가 실행)
+│   ├── nginx/            #   공개 사이트 · upstream 시드 · 내부 :8080 고정 진입점
+│   ├── docker-compose*.yml # 로컬 인프라 · 운영(MySQL+RabbitMQ) · 채점기 · Discord 봇
+│   └── archive/          #   AWS 시절 설계·이전 기록 (현재 구성 아님)
 ├── scripts/dev.sh        # 로컬 백엔드 실행 스크립트
 └── .github/workflows/    # ci.yml (검증) · cd.yml (배포)
 ```
@@ -140,11 +138,9 @@ cd frontend && npm run lint && npm run build
 `master`에 머지되면 GitHub Actions(`cd.yml`)가 자동으로:
 
 1. 백엔드 테스트 재실행 → API·봇 이미지 빌드 후 GHCR push
-2. OJ 박스에 SSH 접속해 **교차 롤링 배포**(`rolling-deploy.sh`) 실행 —
-   EOJ 드레인(nginx upstream에서 `down`) → EOJ 교체 → 복귀 → OJ 드레인 → OJ 교체 → 복귀.
-   드레인된 박스의 트래픽을 반대쪽이 100% 받으므로 사용자 체감 다운타임이 없습니다.
-   새 컨테이너가 `/api/health`를 통과하지 못하면 그 박스는 이전 이미지로 롤백하고,
-   어느 단계에서 실패하든 양쪽 upstream을 원상 복구합니다.
+2. 박스에 SSH 접속해 **blue-green 배포**(`deploy-api.sh`) 실행 —
+   비어 있는 포트에 새 컨테이너를 띄우고 `/api/health`가 통과하면 nginx upstream을 전환합니다.
+   통과하지 못하면 nginx를 건드리지 않고 새 컨테이너만 지우므로 구버전이 계속 서빙됩니다.
 3. 배포 성공 시 머지된 PR 본문의 `## 공지` 섹션으로 **Discord 업데이트 공지**
 
 Flyway 마이그레이션은 앱이 부팅하면서 자동 적용되므로 스키마 변경에 별도 서버 작업이 필요 없습니다.
