@@ -38,55 +38,120 @@ jobs:
       # wrong, and it needs no docker daemon — so it is gated here.
       - run: python -m unittest discover -s judge-runner -v
 
+  # Each architecture builds on its own native runner. Emulating arm64 under
+  # QEMU broke on the sandbox image: pypy3's post-install step runs PyPy's JIT,
+  # which QEMU killed with "Illegal instruction". Native arm64 runners are free
+  # for public repos and much faster than emulation anyway.
   build:
-    name: Build & push judge images
+    name: Build judge images (${{ matrix.arch }})
     needs: test
-    # Only master publishes; a PR build just proves the images still build.
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
+    env:
+      # Only master publishes; a PR build just proves the images still build.
+      PUSH: ${{ github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@v4
-
-      # The judge box is arm64 (Oracle Ampere); amd64 is built too so the
-      # images stay usable on an x86 box.
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to GHCR
-        if: ${{ github.event_name != 'pull_request' }}
+        if: ${{ env.PUSH == 'true' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & push runner
+      # Pushed by digest only; the merge job stitches both architectures into
+      # the :latest / :<sha> manifest lists.
+      - name: Build runner
+        id: runner
         uses: docker/build-push-action@v6
         with:
           context: ./judge-runner
           file: ./judge-runner/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ${{ env.RUNNER_IMAGE }}:latest
-            ${{ env.RUNNER_IMAGE }}:${{ github.sha }}
-          cache-from: type=gha,scope=judge-runner
-          cache-to: type=gha,mode=max,scope=judge-runner
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.RUNNER_IMAGE }},push-by-digest=true,name-canonical=true,push=${{ env.PUSH }}
+          cache-from: type=gha,scope=judge-runner-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=judge-runner-${{ matrix.arch }}
 
-      - name: Build & push sandbox
+      - name: Build sandbox
+        id: sandbox
         uses: docker/build-push-action@v6
         with:
           context: ./judge-runner/sandbox
           file: ./judge-runner/sandbox/Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ${{ env.SANDBOX_IMAGE }}:latest
-            ${{ env.SANDBOX_IMAGE }}:${{ github.sha }}
-          cache-from: type=gha,scope=judge-sandbox
-          cache-to: type=gha,mode=max,scope=judge-sandbox
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.SANDBOX_IMAGE }},push-by-digest=true,name-canonical=true,push=${{ env.PUSH }}
+          cache-from: type=gha,scope=judge-sandbox-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=judge-sandbox-${{ matrix.arch }}
+
+      - name: Export digests
+        if: ${{ env.PUSH == 'true' }}
+        run: |
+          mkdir -p digests/runner digests/sandbox
+          touch "digests/runner/${RUNNER_DIGEST#sha256:}"
+          touch "digests/sandbox/${SANDBOX_DIGEST#sha256:}"
+        env:
+          RUNNER_DIGEST: ${{ steps.runner.outputs.digest }}
+          SANDBOX_DIGEST: ${{ steps.sandbox.outputs.digest }}
+
+      - name: Upload digests
+        if: ${{ env.PUSH == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: digests/
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Build & push judge images
+    needs: build
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digests-*
+          path: digests
+          merge-multiple: true
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish multi-arch manifests
+        run: |
+          set -eu
+          publish() {
+            image="$1"; dir="$2"
+            refs=""
+            for d in "$dir"/*; do refs="$refs $image@sha256:$(basename "$d")"; done
+            # shellcheck disable=SC2086
+            docker buildx imagetools create -t "$image:latest" -t "$image:$GITHUB_SHA" $refs
+            docker buildx imagetools inspect "$image:latest"
+          }
+          publish "$RUNNER_IMAGE" digests/runner
+          publish "$SANDBOX_IMAGE" digests/sandbox
