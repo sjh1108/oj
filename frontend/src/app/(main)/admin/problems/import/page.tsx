@@ -44,6 +44,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DifficultyBadge } from "@/components/status-badge";
+import { ProblemAnnouncementCard } from "@/components/problem-announcement-card";
 
 // A multi-file drop hands over dataTransfer.files in whatever order the OS/browser
 // happened to collect them — for Chrome that is the file you grabbed first, then
@@ -465,6 +466,14 @@ export default function ImportProblemsPage() {
   const resumable = items.filter(
     (it) => it.status === "failed" && it.parsed && !it.parsedDropped,
   );
+
+  // Problems that landed, in list (= upload) order, for the 선정 문제 알림.
+  const announced = items
+    .filter((it) => it.status === "done" && it.createdId != null)
+    .map((it) => ({
+      id: it.createdId!,
+      title: it.parsed?.title ?? it.fileName,
+    }));
 
   const runItems = async (targets: ImportItem[]) => {
     if (targets.length === 0 || useImportBatchStore.getState().running) return;
@@ -925,6 +934,8 @@ export default function ImportProblemsPage() {
           </CardContent>
         </Card>
       )}
+
+      {!uploading && <ProblemAnnouncementCard problems={announced} />}
     </main>
   );
 }
