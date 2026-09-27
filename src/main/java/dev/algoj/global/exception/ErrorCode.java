@@ -50,8 +50,7 @@ public enum ErrorCode {
     DISCORD_NOT_LINKED(HttpStatus.NOT_FOUND, "D003", "연동된 OJ 계정이 없습니다. 먼저 /연동 으로 계정을 연결하세요."),
     INVALID_BOT_KEY(HttpStatus.UNAUTHORIZED, "D004", "봇 인증에 실패했습니다."),
     ANNOUNCE_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "D005", "선정 문제 알림 웹훅이 설정되지 않았습니다."),
-    ANNOUNCE_FAILED(HttpStatus.BAD_GATEWAY, "D006", "디스코드로 알림을 보내지 못했습니다."),
-    ANNOUNCEMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "D007", "존재하지 않는 알림 기록입니다.");
+    ANNOUNCE_FAILED(HttpStatus.BAD_GATEWAY, "D006", "디스코드로 알림을 보내지 못했습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;

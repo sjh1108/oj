@@ -1,15 +1,21 @@
 "use client";
 
 import { MegaphoneIcon, SendIcon, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api";
 import {
   problemAnnouncementApi,
   type ProblemAnnouncementConfig,
-  type ProblemAnnouncementRecord,
 } from "@/lib/admin-api";
+import {
+  loadAnnouncements,
+  recordAnnouncement,
+  removeAnnouncement,
+  suggestedWeek,
+  type AnnouncementRecord,
+} from "@/lib/problem-announcement-history";
 import {
   buildAnnouncement,
   defaultAnnounceMonth,
@@ -52,34 +58,20 @@ export function ProblemAnnouncementCard({
   const [draft, setDraft] = useState<string | null>(null);
   const [testOnly, setTestOnly] = useState(false);
   const [sending, setSending] = useState(false);
-  const [records, setRecords] = useState<ProblemAnnouncementRecord[]>([]);
-
-  const loadRecords = useCallback(() => {
-    problemAnnouncementApi
-      .recent()
-      .then(setRecords)
-      .catch(() => setRecords([]));
-  }, []);
+  const [records, setRecords] = useState<AnnouncementRecord[]>([]);
 
   useEffect(() => {
     problemAnnouncementApi
       .config()
       .then(setConfig)
       .catch(() => setConfig({ enabled: false, roleId: null }));
-    loadRecords();
-  }, [loadRecords]);
+    setRecords(loadAnnouncements());
+  }, []);
 
   // Picking a month (or a new record landing) resets the week to that
   // month's default; the admin can still change it afterwards.
   useEffect(() => {
-    let cancelled = false;
-    problemAnnouncementApi
-      .suggestion(year, month)
-      .then((s) => !cancelled && setWeek(s.weekOfMonth))
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+    setWeek(suggestedWeek(records, year, month));
   }, [year, month, records]);
 
   const label = weekLabel(month, week);
@@ -110,20 +102,14 @@ export function ProblemAnnouncementCard({
     if (!draft?.trim()) return;
     setSending(true);
     try {
-      await problemAnnouncementApi.send({
-        content: draft,
-        year,
-        month,
-        weekOfMonth: week,
-        record: !testOnly,
-      });
+      await problemAnnouncementApi.send(draft);
       toast.success(
         testOnly
           ? "테스트로 보냈습니다 (기록하지 않음)"
           : "디스코드에 선정 문제 알림을 보냈습니다",
       );
       setDraft(null);
-      if (!testOnly) loadRecords();
+      if (!testOnly) setRecords(recordAnnouncement(year, month, week));
     } catch (err) {
       toast.error(errorMessage(err, "알림을 보내지 못했습니다"));
     } finally {
@@ -131,19 +117,13 @@ export function ProblemAnnouncementCard({
     }
   };
 
-  const removeRecord = async (r: ProblemAnnouncementRecord) => {
+  const removeRecord = (r: AnnouncementRecord) => {
     if (
-      !window.confirm(
+      window.confirm(
         `${r.year}년 ${weekLabel(r.month, r.weekOfMonth)} 기록을 지울까요? 디스코드 메시지는 지워지지 않고, 다음 주차 기본값 계산에서만 빠집니다.`,
       )
     )
-      return;
-    try {
-      await problemAnnouncementApi.remove(r.id);
-      loadRecords();
-    } catch (err) {
-      toast.error(errorMessage(err, "기록을 지우지 못했습니다"));
-    }
+      setRecords(removeAnnouncement(r.id));
   };
 
   const tooLong = (draft?.length ?? 0) > DISCORD_MESSAGE_LIMIT;
@@ -273,7 +253,12 @@ export function ProblemAnnouncementCard({
 
         {records.length > 0 && (
           <div className="border-t pt-3">
-            <p className="text-xs font-medium mb-1.5">최근 보낸 알림</p>
+            <p className="text-xs font-medium mb-1.5">
+              최근 보낸 알림{" "}
+              <span className="font-normal text-muted-foreground">
+                (이 브라우저에만 저장)
+              </span>
+            </p>
             <ul className="space-y-1">
               {records.map((r) => (
                 <li
@@ -287,7 +272,7 @@ export function ProblemAnnouncementCard({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => void removeRecord(r)}
+                    onClick={() => removeRecord(r)}
                     aria-label="기록 삭제"
                   >
                     <Trash2 className="size-3.5" />
