@@ -28,6 +28,7 @@ AWS 무료 크레딧이 끊기면서 네 조각(OJ·EOJ·JJ·RDS)으로 흩어�
 ```
 /opt/algoj/
 ├── .env                        # 비밀 (chmod 600)
+├── backup.env                  # DB 백업 업로드 설정 (chmod 600, 선택) — backup.md
 ├── repo/                       # 이 저장소 클론 — compose 파일과 스크립트의 출처
 ├── deploy-api.sh               # 한 박스 blue-green 배포 (CD가 매 배포마다 갱신)
 ├── docker-compose.oci.yml      # MySQL + RabbitMQ
@@ -35,7 +36,9 @@ AWS 무료 크레딧이 끊기면서 네 조각(OJ·EOJ·JJ·RDS)으로 흩어�
 ├── docker-compose.bot.yml      # Discord 봇
 ├── mysql-data/                 # MySQL 데이터
 ├── rabbitmq-data/              # 브로커 데이터 (durable 큐)
-└── judge-work/                 # 채점 작업 디렉터리 (실행 후 비워진다)
+├── judge-work/                 # 채점 작업 디렉터리 (실행 후 비워진다)
+├── backups/                    # DB 백업 최근 7개 (cron, backup-db.sh)
+└── backup.log                  # 백업 실행 기록
 ```
 
 ```bash
@@ -72,6 +75,12 @@ cp /opt/algoj/repo/deploy/docker-compose.{oci,judge,bot}.yml /opt/algoj/
 - **메모리**: 12GB라 평소에는 여유가 크다. `free -h`, `docker stats --no-stream`으로 컨테이너별
   RSS를 본다. `deploy-api.sh`는 박스 전체 RAM이 4GB 이상이면 `-Xms512m -Xmx1500m`, 그보다 작으면
   예전 소형 박스용 캡(`-Xmx300m` + SerialGC)을 자동으로 고른다. 봇은 128m, 브로커는 512m로 묶여 있다.
+
+## DB 백업
+
+MySQL이 박스 안에 있으므로 백업도 직접 한다. `deploy/backup-db.sh`를 cron으로 매일 돌려
+박스에 7개를 보관하고, 설정하면 박스 밖 S3 호환 스토리지로도 올린다. 설치·복구 절차는
+[`backup.md`](backup.md).
 
 ## 운영 명령 cheat sheet
 

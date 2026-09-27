@@ -52,6 +52,8 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 - 제출 → `judge.queue` 적재 → 리스너 워커가 꺼내 채점 → 결과 저장, 프론트는 폴링으로 갱신.
   PENDING으로 남은 제출은 스위퍼가 1분 주기로 재적재합니다
 - DB 스키마는 **Flyway**(`src/main/resources/db/migration/`)가 관리하고 Hibernate는 `validate`만 수행합니다
+- DB는 매일 덤프해 박스에 보관하고, 설정하면 박스 밖 스토리지로도 올립니다 →
+  [`deploy/backup.md`](deploy/backup.md)
 - 이전 경위는 [`deploy/oracle-cloud-migration.md`](deploy/oracle-cloud-migration.md),
   AWS 시절의 이중화·컴포넌트 분리 기록은 [`deploy/archive/`](deploy/archive/README.md)에 남아 있습니다
 
@@ -75,6 +77,7 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 ├── discord-bot/          # Discord 봇 (연동/비밀번호/서버상태/배포공지)
 ├── deploy/               # 배포 자료 + 운영 가이드
 │   ├── deploy-api.sh     #   한 박스 blue-green 배포 (CD가 실행)
+│   ├── backup-db.sh      #   DB 백업 (cron으로 매일)
 │   ├── nginx/            #   공개 사이트 · upstream 시드 · 내부 :8080 고정 진입점
 │   ├── docker-compose*.yml # 로컬 인프라 · 운영(MySQL+RabbitMQ) · 채점기 · Discord 봇
 │   └── archive/          #   AWS 시절 설계·이전 기록 (현재 구성 아님)
@@ -102,8 +105,8 @@ cd deploy
 docker compose --env-file ../.env.dev up -d   # mysql :3306, rabbitmq :5672 (+관리 UI :15672)
 ```
 
-로컬 전용 구성입니다. 운영에서는 DB가 RDS, RabbitMQ·Judge0가 JJ 박스에 있어
-API 박스에는 봇 말고 compose 서비스가 없습니다.
+로컬 전용 구성입니다. 운영은 MySQL·RabbitMQ를 `deploy/docker-compose.oci.yml`로 띄우고
+호스트 포트를 열지 않습니다(위 [아키텍처](#아키텍처) 참고).
 
 ### 3. 백엔드
 
