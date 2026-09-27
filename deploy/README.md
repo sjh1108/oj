@@ -68,7 +68,7 @@ cp /opt/algoj/repo/deploy/docker-compose.{oci,judge,bot}.yml /opt/algoj/
 - **채점이 PENDING에서 안 넘어감**: 브로커나 채점기 문제다.
   `docker exec algoj-rabbitmq rabbitmqctl list_queues name messages consumers` —
   `judge.queue`의 consumers가 0이면 API 워커가 안 붙은 것이다. 채점기는
-  [`judge-runner/README.md`](../judge-runner/README.md)의 문제 해결 항목을 본다.
+  [`judge-runner/README.md`](../judge-runner/README.md#문제가-생기면)의 **문제가 생기면** 절을 본다.
 - **메모리**: 12GB라 평소에는 여유가 크다. `free -h`, `docker stats --no-stream`으로 컨테이너별
   RSS를 본다. `deploy-api.sh`는 박스 전체 RAM이 4GB 이상이면 `-Xms512m -Xmx1500m`, 그보다 작으면
   예전 소형 박스용 캡(`-Xmx300m` + SerialGC)을 자동으로 고른다. 봇은 128m, 브로커는 512m로 묶여 있다.
