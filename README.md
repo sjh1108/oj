@@ -52,7 +52,7 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 - 제출 → `judge.queue` 적재 → 리스너 워커가 꺼내 채점 → 결과 저장, 프론트는 폴링으로 갱신.
   PENDING으로 남은 제출은 스위퍼가 1분 주기로 재적재합니다
 - DB 스키마는 **Flyway**(`src/main/resources/db/migration/`)가 관리하고 Hibernate는 `validate`만 수행합니다
-- DB는 매일 덤프해 박스에 보관하고, 설정하면 박스 밖 스토리지로도 올립니다 →
+- DB는 매일 덤프해 박스에 보관하고, 설정하면 Google Drive로도 올립니다 →
   [`deploy/backup.md`](deploy/backup.md)
 - 이전 경위는 [`deploy/oracle-cloud-migration.md`](deploy/oracle-cloud-migration.md),
   AWS 시절의 이중화·컴포넌트 분리 기록은 [`deploy/archive/`](deploy/archive/README.md)에 남아 있습니다

@@ -5,7 +5,7 @@ AWS 시절에는 RDS가 자동 백업을 해 줬다. 지금 MySQL은 박스 안 
 문제·제출·계정이 그대로 사라진다.
 
 `deploy/backup-db.sh`가 매일 덤프를 떠서 박스에 7개를 보관하고, 설정돼 있으면 박스 밖
-S3 호환 스토리지로도 올린다.
+(Google Drive, 또는 S3 호환 스토리지)으로도 올린다.
 
 ## PR로 자동 반영되는 것 / 박스에서 할 일
 
@@ -13,7 +13,7 @@ S3 호환 스토리지로도 올린다.
 |---|---|
 | 백업 스크립트 `deploy/backup-db.sh` | `repo` 갱신(`git pull`) 후 수동 1회 실행으로 검증 |
 | 업로드 설정 양식 `deploy/backup.env.example` | cron 등록 |
-| 복구·검증 절차 (이 문서) | (권장) 박스 밖 스토리지 버킷·키 생성, `/opt/algoj/backup.env` 작성 |
+| 복구·검증 절차 (이 문서) | (권장) Google Drive 연결(`rclone.conf`)·`/opt/algoj/backup.env` 작성 |
 
 CD는 `deploy-api.sh`만 박스로 복사한다. 백업 스크립트는 저장소 클론(`/opt/algoj/repo`)에서
 바로 실행하므로, 스크립트가 바뀌면 박스에서 `git pull`만 하면 된다.
@@ -47,45 +47,84 @@ crontab -e
 > 로컬 백업은 실수로 지운 데이터나 깨진 마이그레이션은 되돌려 주지만, **박스가 통째로
 > 사라지면 같이 사라진다.** 2번까지 해 두는 게 목표다.
 
-## 2. 박스 밖으로 올리기 (권장)
+## 2. 박스 밖으로 올리기 (권장) — Google Drive
 
-S3 API를 지원하는 스토리지면 어디든 된다. 스크립트는 박스에 aws CLI를 깔지 않고
-공식 `amazon/aws-cli` 이미지로 한 번 돌려 올린다.
+개인 Google Drive에 [rclone](https://rclone.org/drive/)으로 올린다. 박스에 rclone을 깔지 않고
+공식 `rclone/rclone` 이미지로 돌린다. 원격에는 30일치를 두고(`BACKUP_REMOTE_KEEP_DAYS`),
+그보다 오래된 백업은 스크립트가 휴지통을 거치지 않고 바로 지운다 — 휴지통에 두면 용량을 계속
+차지한다. 백업 하나가 수백 MB라 30일이면 수 GB다.
 
-| 후보 | 비용 | 비고 |
-|---|---|---|
-| OCI Object Storage | Always Free 구간 안 | 같은 Oracle 계정이라 따로 가입할 게 없다. 대신 계정이 막히면 박스와 백업이 같이 막힌다 |
-| Cloudflare R2 | 무료 구간 있음 | 다른 회사라 계정 문제로부터도 분리된다 |
-| AWS S3 | 소액 과금 | 방금 정리한 계정을 다시 쓰게 된다 |
+> 학교·회사 계정의 드라이브는 쓰지 않는다. 졸업·퇴사하면 백업이 계정과 함께 사라지고,
+> 덤프에 들어 있는 유저 정보(이메일·비밀번호 해시)를 기관 저장소에 두게 된다.
 
-무료 한도는 바뀔 수 있으니 콘솔에서 확인한다. 백업 하나가 수백 MB라, 30일 보관이면 수 GB다.
+### 2-1. Google 계정 연결 (1회)
 
-공통 절차:
+박스에는 브라우저가 없어서 **로그인만 PC에서** 한다. PC에도 rclone이 필요하다
+(윈도: `winget install Rclone.Rclone`, 설치 후 새 터미널을 연다).
 
-1. **비공개 버킷**을 만든다(예: `algoj-backups`). 공개 읽기를 켜지 않는다 — 덤프에는
-   계정 정보(비밀번호 해시·이메일)가 들어 있다.
-2. S3 호환 **액세스 키**를 만든다.
-   - OCI: 사용자 설정 → **Customer secret keys**에서 만든다. 엔드포인트는
-     `https://<네임스페이스>.compat.objectstorage.<리전>.oraclecloud.com`이고,
-     네임스페이스는 Object Storage 버킷 상세 화면에 나온다.
-   - R2: **R2 API 토큰**을 해당 버킷의 쓰기 권한으로 만든다.
-3. 버킷에 **수명 주기 규칙**을 걸어 `db/` 아래 객체를 30일 뒤 지우게 한다.
-   스크립트는 박스의 로컬 백업만 정리하고 원격은 건드리지 않는다.
-4. 박스에 설정 파일을 만든다.
+박스에서 설정 마법사를 연다:
+
+```bash
+mkdir -p /opt/algoj/rclone && chmod 700 /opt/algoj/rclone
+docker run --rm -it --user "$(id -u):$(id -g)" \
+  -v /opt/algoj/rclone:/config/rclone \
+  rclone/rclone --config /config/rclone/rclone.conf config
+```
+
+질문에는 이렇게 답한다 (나머지는 Enter로 기본값):
+
+| 질문 | 답 |
+|---|---|
+| New remote | `n` |
+| name | `gdrive` |
+| Storage | `drive` (Google Drive) |
+| client_id / client_secret | 비워 둔다 |
+| scope | **`drive.file`** — rclone이 만든 파일만 볼 수 있다. 드라이브의 다른 파일에는 손대지 못한다 |
+| service_account_file | 비워 둔다 |
+| Edit advanced config | `n` |
+| Use web browser to automatically authenticate | **`n`** — 박스에는 브라우저가 없다 |
+
+그러면 마법사가 `rclone authorize "drive" "eyJ..."` 형태의 명령을 보여 준다. 그 명령을
+**PC 터미널에 그대로 붙여 넣으면** 브라우저가 열리고, 백업을 둘 Google 계정으로 로그인해
+허용한다. PC 터미널에 찍힌 토큰(`{"access_token":...}` 한 줄 또는 `config_token` 값)을 박스의
+마법사에 붙여 넣는다. 이어지는 질문(Shared Drive 등)은 `n`, 마지막에 `y`로 저장하고 `q`로 나온다.
+
+연결 확인:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v /opt/algoj/rclone:/config/rclone \
+  rclone/rclone --config /config/rclone/rclone.conf lsd gdrive:
+```
+
+에러 없이 끝나면 된다 (처음엔 아무것도 안 나오는 게 정상 — `drive.file`이라 rclone이 만든
+폴더만 보인다).
+
+### 2-2. 백업 설정
 
 ```bash
 cp /opt/algoj/repo/deploy/backup.env.example /opt/algoj/backup.env
 chmod 600 /opt/algoj/backup.env
-nano /opt/algoj/backup.env          # 버킷·엔드포인트·리전·키 채우기
-bash /opt/algoj/repo/deploy/backup-db.sh   # 마지막에 "업로드: s3://..." 후 "완료"
+bash /opt/algoj/repo/deploy/backup-db.sh   # "업로드: gdrive:algoj-backups/..." 후 "완료"
 ```
 
-콘솔에서 버킷에 파일이 올라왔는지 본다. 이후로는 cron이 매일 같이 올린다.
+양식의 기본값(`BACKUP_RCLONE_REMOTE=gdrive:algoj-backups`)이 위 설정과 맞으므로 고칠 게 없다.
+Google Drive 웹에서 `algoj-backups` 폴더에 파일이 생겼는지 본다. 이후로는 cron이 매일 올린다.
 
-> 설정은 `.env`가 아니라 `backup.env`에 둔다. `.env`는 `deploy-api.sh`가 API 컨테이너에
-> 통째로 넣으므로, 거기 두면 API도 백업용 키를 보게 된다.
+> 설정은 `.env`가 아니라 `backup.env`와 `rclone/rclone.conf`에 둔다. `.env`는
+> `deploy-api.sh`가 API 컨테이너에 통째로 넣으므로, 거기 두면 API도 백업용 로그인 정보를 보게 된다.
+> `rclone.conf`에는 Google 로그인 토큰이 들어 있으니 다른 곳에 복사하지 않는다.
 
 업로드가 실패해도 로컬 백업은 남고, 스크립트는 실패로 끝나 `backup.log`에 이유가 찍힌다.
+토큰은 rclone이 매일 쓰면서 자동으로 갱신한다. Google 계정 비밀번호를 바꾸거나 앱 접근 권한을
+해제했다면 2-1을 다시 한다.
+
+### 다른 저장소를 쓰고 싶을 때
+
+rclone이 지원하는 곳(OneDrive 등)은 2-1에서 Storage만 바꾸고 `BACKUP_RCLONE_REMOTE`를 그 이름에
+맞추면 된다. S3 호환 스토리지(AWS S3·OCI Object Storage·Cloudflare R2)는 `backup.env`의
+`BACKUP_S3_*`를 채우면 공식 `amazon/aws-cli` 이미지로 올린다. 이때는 버킷을 비공개로 만들고,
+오래된 백업은 버킷의 수명 주기 규칙으로 지운다(스크립트는 S3 쪽을 정리하지 않는다).
+둘 다 채우면 둘 다 올린다.
 
 ## 3. 복구
 
@@ -128,5 +167,13 @@ curl -s http://127.0.0.1:8080/api/health
 적용된다(`docker restart algoj-api-blue` 또는 `-green` — 활성 색은
 `/etc/nginx/conf.d/algoj-upstream.conf`의 포트로 확인).
 
-박스 밖에 있는 백업을 쓸 때는 먼저 박스로 내려받는다(OCI·R2 콘솔에서 다운로드하거나
-`amazon/aws-cli`로 `s3 cp s3://<버킷>/db/<파일> /opt/algoj/backups/`).
+박스 밖에 있는 백업을 쓸 때는 먼저 박스로 내려받는다.
+
+```bash
+# Google Drive → 박스
+docker run --rm --user "$(id -u):$(id -g)" -v /opt/algoj/rclone:/config/rclone \
+  -v /opt/algoj/backups:/backups rclone/rclone --config /config/rclone/rclone.conf \
+  copy gdrive:algoj-backups/<파일> /backups/
+```
+
+박스가 통째로 사라진 경우에는 Google Drive 웹에서 파일을 내려받아 새 박스로 올리면 된다.

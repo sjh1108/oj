@@ -29,6 +29,7 @@ AWS 무료 크레딧이 끊기면서 네 조각(OJ·EOJ·JJ·RDS)으로 흩어�
 /opt/algoj/
 ├── .env                        # 비밀 (chmod 600)
 ├── backup.env                  # DB 백업 업로드 설정 (chmod 600, 선택) — backup.md
+├── rclone/rclone.conf          # Google Drive 로그인 토큰 (chmod 700 디렉터리) — backup.md
 ├── repo/                       # 이 저장소 클론 — compose 파일과 스크립트의 출처
 ├── deploy-api.sh               # 한 박스 blue-green 배포 (CD가 매 배포마다 갱신)
 ├── docker-compose.oci.yml      # MySQL + RabbitMQ
@@ -79,7 +80,7 @@ cp /opt/algoj/repo/deploy/docker-compose.{oci,judge,bot}.yml /opt/algoj/
 ## DB 백업
 
 MySQL이 박스 안에 있으므로 백업도 직접 한다. `deploy/backup-db.sh`를 cron으로 매일 돌려
-박스에 7개를 보관하고, 설정하면 박스 밖 S3 호환 스토리지로도 올린다. 설치·복구 절차는
+박스에 7개를 보관하고, 설정하면 Google Drive(rclone)로도 올린다. 설치·복구 절차는
 [`backup.md`](backup.md).
 
 ## 운영 명령 cheat sheet
