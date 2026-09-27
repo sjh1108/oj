@@ -5,18 +5,17 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.time.LocalDate;
 import java.util.List;
 
 public interface ProblemAnnouncementRepository extends JpaRepository<ProblemAnnouncement, Long> {
 
     /**
-     * Distinct study dates already announced in [from, before). Distinct, so
-     * re-sending a corrected notice for the same study doesn't bump the week.
+     * Highest week already announced in the month, 0 if none. Max rather than a
+     * count, so re-sending a corrected notice for the same week doesn't bump it.
      */
-    @Query("select count(distinct a.studyDate) from ProblemAnnouncement a "
-            + "where a.studyDate >= :from and a.studyDate < :before")
-    long countStudyDatesBetween(@Param("from") LocalDate from, @Param("before") LocalDate before);
+    @Query("select coalesce(max(a.weekOfMonth), 0) from ProblemAnnouncement a "
+            + "where a.year = :year and a.month = :month")
+    int findMaxWeek(@Param("year") int year, @Param("month") int month);
 
-    List<ProblemAnnouncement> findTop10ByOrderByStudyDateDescIdDesc();
+    List<ProblemAnnouncement> findTop10ByOrderByYearDescMonthDescWeekOfMonthDescIdDesc();
 }

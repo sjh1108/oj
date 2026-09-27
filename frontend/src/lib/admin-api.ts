@@ -17,15 +17,16 @@ export interface ProblemAnnouncementConfig {
   roleId: string | null;
 }
 
-export interface ProblemAnnouncementWeek {
-  studyDate: string;
+export interface ProblemAnnouncementSuggestion {
+  year: number;
   month: number;
   weekOfMonth: number;
 }
 
 export interface ProblemAnnouncementRecord {
   id: number;
-  studyDate: string;
+  year: number;
+  month: number;
   weekOfMonth: number;
   createdAt: string;
 }
@@ -33,13 +34,19 @@ export interface ProblemAnnouncementRecord {
 export const problemAnnouncementApi = {
   config: () =>
     api<ProblemAnnouncementConfig>("/api/admin/problem-announcements/config"),
-  week: (studyDate: string) =>
-    api<ProblemAnnouncementWeek>(
-      `/api/admin/problem-announcements/week?studyDate=${studyDate}`,
+  suggestion: (year: number, month: number) =>
+    api<ProblemAnnouncementSuggestion>(
+      `/api/admin/problem-announcements/suggestion?year=${year}&month=${month}`,
     ),
   recent: () =>
     api<ProblemAnnouncementRecord[]>("/api/admin/problem-announcements"),
-  send: (body: { content: string; studyDate: string; record: boolean }) =>
+  send: (body: {
+    content: string;
+    year: number;
+    month: number;
+    weekOfMonth: number;
+    record: boolean;
+  }) =>
     api<void>("/api/admin/problem-announcements", { method: "POST", body }),
   remove: (id: number) =>
     api<void>(`/api/admin/problem-announcements/${id}`, { method: "DELETE" }),

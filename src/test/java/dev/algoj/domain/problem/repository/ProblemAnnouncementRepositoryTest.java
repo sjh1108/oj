@@ -6,8 +6,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 
-import java.time.LocalDate;
-
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest(properties = {
@@ -26,45 +24,37 @@ class ProblemAnnouncementRepositoryTest {
     @Autowired
     ProblemAnnouncementRepository repository;
 
-    private void announce(String date) {
-        repository.save(ProblemAnnouncement.of(LocalDate.parse(date), 1, "x"));
-    }
-
-    private long weekBefore(String date) {
-        LocalDate d = LocalDate.parse(date);
-        return repository.countStudyDatesBetween(d.withDayOfMonth(1), d) + 1;
+    private void announce(int year, int month, int week) {
+        repository.save(ProblemAnnouncement.of(year, month, week, "x"));
     }
 
     @Test
-    void skippedWeeksDoNotCount_onlyAnnouncedStudiesDo() {
-        // September studies, then Oct 5 skipped: Oct 12 is October's first study.
-        announce("2026-09-14");
-        announce("2026-09-21");
+    void maxWeek_isPerMonth_andZeroForAMonthWithNothingSent() {
+        announce(2026, 9, 2);
+        announce(2026, 9, 3);
 
-        assertThat(weekBefore("2026-10-12")).isEqualTo(1);
-
-        announce("2026-10-12");
-        assertThat(weekBefore("2026-10-19")).isEqualTo(2);
+        assertThat(repository.findMaxWeek(2026, 9)).isEqualTo(3);
+        assertThat(repository.findMaxWeek(2026, 10)).isZero();
+        // Same month a year later is a different month.
+        assertThat(repository.findMaxWeek(2027, 9)).isZero();
     }
 
     @Test
-    void resendingForTheSameStudy_keepsItsWeek_andCountsOnceForLaterOnes() {
-        announce("2026-10-12");
-        announce("2026-10-12"); // corrected notice for the same study
+    void resendingTheSameWeek_doesNotBumpTheMax() {
+        announce(2026, 10, 1);
+        announce(2026, 10, 1); // corrected notice for the same study
 
-        assertThat(weekBefore("2026-10-12")).isEqualTo(1);
-        assertThat(weekBefore("2026-10-19")).isEqualTo(2);
+        assertThat(repository.findMaxWeek(2026, 10)).isEqualTo(1);
     }
 
     @Test
-    void recent_isNewestStudyFirst() {
-        announce("2026-09-14");
-        announce("2026-10-12");
-        announce("2026-09-21");
+    void recent_isNewestWeekFirst() {
+        announce(2026, 9, 3);
+        announce(2026, 10, 1);
+        announce(2026, 9, 4);
 
-        assertThat(repository.findTop10ByOrderByStudyDateDescIdDesc())
-                .extracting(ProblemAnnouncement::getStudyDate)
-                .containsExactly(LocalDate.parse("2026-10-12"), LocalDate.parse("2026-09-21"),
-                        LocalDate.parse("2026-09-14"));
+        assertThat(repository.findTop10ByOrderByYearDescMonthDescWeekOfMonthDescIdDesc())
+                .extracting(a -> a.getMonth() + "/" + a.getWeekOfMonth())
+                .containsExactly("10/1", "9/4", "9/3");
     }
 }

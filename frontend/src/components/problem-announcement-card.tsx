@@ -12,17 +12,22 @@ import {
 } from "@/lib/admin-api";
 import {
   buildAnnouncement,
+  defaultAnnounceMonth,
   DISCORD_MESSAGE_LIMIT,
-  nextMondayIso,
   replaceWeekLabel,
   weekLabel,
+  yearForMonth,
   type AnnouncedProblem,
 } from "@/lib/problem-announcement";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+
+const MONTHS = Array.from({ length: 12 }, (_, i) => i + 1);
+const WEEKS = [1, 2, 3, 4, 5];
+const SELECT_CLASS =
+  "h-8 rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30";
 
 const errorMessage = (err: unknown, fallback: string) =>
   err instanceof ApiError ? err.message : fallback;
@@ -30,9 +35,10 @@ const errorMessage = (err: unknown, fallback: string) =>
 /**
  * "선정 문제 알림" — shown on the bulk upload page once problems have landed.
  *
- * The week in the title is the nth study actually held in the study date's
- * month; the server derives it from notices recorded so far, so weeks the
- * study skips (no notice sent) are not counted. A test send is not recorded.
+ * The admin picks the month and week from two dropdowns. Picking a month
+ * fills in its default week — one past the highest week already sent that
+ * month, so weeks the study skips (no notice sent) are not counted. A test
+ * send is not recorded.
  */
 export function ProblemAnnouncementCard({
   problems,
@@ -40,8 +46,9 @@ export function ProblemAnnouncementCard({
   problems: AnnouncedProblem[];
 }) {
   const [config, setConfig] = useState<ProblemAnnouncementConfig | null>(null);
-  const [studyDate, setStudyDate] = useState(nextMondayIso);
-  const [label, setLabel] = useState<string | null>(null);
+  const [year, setYear] = useState(() => defaultAnnounceMonth().year);
+  const [month, setMonth] = useState(() => defaultAnnounceMonth().month);
+  const [week, setWeek] = useState(1);
   const [draft, setDraft] = useState<string | null>(null);
   const [testOnly, setTestOnly] = useState(false);
   const [sending, setSending] = useState(false);
@@ -62,24 +69,31 @@ export function ProblemAnnouncementCard({
     loadRecords();
   }, [loadRecords]);
 
-  // Recompute "N월 N주차" whenever the study date changes, and patch it into a
-  // draft that is already open without discarding the admin's edits.
+  // Picking a month (or a new record landing) resets the week to that
+  // month's default; the admin can still change it afterwards.
   useEffect(() => {
-    if (!studyDate) return;
     let cancelled = false;
     problemAnnouncementApi
-      .week(studyDate)
-      .then((w) => {
-        if (cancelled) return;
-        const next = weekLabel(w.month, w.weekOfMonth);
-        setLabel(next);
-        setDraft((d) => (d == null ? d : replaceWeekLabel(d, next)));
-      })
-      .catch(() => !cancelled && setLabel(null));
+      .suggestion(year, month)
+      .then((s) => !cancelled && setWeek(s.weekOfMonth))
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [studyDate, records]);
+  }, [year, month, records]);
+
+  const label = weekLabel(month, week);
+
+  // Keep an open draft's title in step with the dropdowns, without discarding
+  // the admin's other edits.
+  useEffect(() => {
+    setDraft((d) => (d == null ? d : replaceWeekLabel(d, label)));
+  }, [label]);
+
+  const pickMonth = (m: number) => {
+    setYear(yearForMonth(m));
+    setMonth(m);
+  };
 
   if (problems.length === 0 || config == null) return null;
 
@@ -87,18 +101,20 @@ export function ProblemAnnouncementCard({
     setDraft(
       buildAnnouncement(problems, {
         siteUrl: window.location.origin,
-        weekLabel: label ?? "N월 N주차",
+        weekLabel: label,
         roleId: config.roleId,
       }),
     );
 
   const send = async () => {
-    if (!draft?.trim() || !studyDate) return;
+    if (!draft?.trim()) return;
     setSending(true);
     try {
       await problemAnnouncementApi.send({
         content: draft,
-        studyDate,
+        year,
+        month,
+        weekOfMonth: week,
         record: !testOnly,
       });
       toast.success(
@@ -118,7 +134,7 @@ export function ProblemAnnouncementCard({
   const removeRecord = async (r: ProblemAnnouncementRecord) => {
     if (
       !window.confirm(
-        `${r.studyDate} (${r.weekOfMonth}주차) 기록을 지울까요? 디스코드 메시지는 지워지지 않고, 이후 주차 계산에서만 빠집니다.`,
+        `${r.year}년 ${weekLabel(r.month, r.weekOfMonth)} 기록을 지울까요? 디스코드 메시지는 지워지지 않고, 다음 주차 기본값 계산에서만 빠집니다.`,
       )
     )
       return;
@@ -145,7 +161,7 @@ export function ProblemAnnouncementCard({
           <Button
             type="button"
             size="sm"
-            disabled={!config.enabled || !studyDate}
+            disabled={!config.enabled}
             onClick={openDraft}
           >
             <MegaphoneIcon className="size-4 mr-1" />
@@ -164,21 +180,41 @@ export function ProblemAnnouncementCard({
 
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1">
-            <Label htmlFor="announce-study-date" className="text-xs">
-              스터디 날짜
+            <Label htmlFor="announce-month" className="text-xs">
+              월
             </Label>
-            <Input
-              id="announce-study-date"
-              type="date"
-              value={studyDate}
-              onChange={(e) => setStudyDate(e.target.value)}
-              className="w-44"
-            />
+            <select
+              id="announce-month"
+              value={month}
+              onChange={(e) => pickMonth(Number(e.target.value))}
+              className={SELECT_CLASS}
+            >
+              {MONTHS.map((m) => (
+                <option key={m} value={m}>
+                  {m}월
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="announce-week" className="text-xs">
+              주차
+            </Label>
+            <select
+              id="announce-week"
+              value={week}
+              onChange={(e) => setWeek(Number(e.target.value))}
+              className={SELECT_CLASS}
+            >
+              {WEEKS.map((w) => (
+                <option key={w} value={w}>
+                  {w}주차
+                </option>
+              ))}
+            </select>
           </div>
           <p className="text-xs text-muted-foreground pb-2">
-            {label
-              ? `→ ${label} (그 달에 기록된 스터디 수 + 1, 쉬는 주는 세지 않음)`
-              : "주차를 계산하는 중…"}
+            → {year}년 {label} · 기본값은 그 달에 보낸 마지막 주차 + 1
           </p>
         </div>
 
@@ -224,7 +260,7 @@ export function ProblemAnnouncementCard({
                 <Button
                   type="button"
                   size="sm"
-                  disabled={sending || tooLong || !draft.trim() || !studyDate}
+                  disabled={sending || tooLong || !draft.trim()}
                   onClick={() => void send()}
                 >
                   <SendIcon className="size-4 mr-1" />
@@ -245,8 +281,7 @@ export function ProblemAnnouncementCard({
                   className="flex items-center justify-between text-xs text-muted-foreground"
                 >
                   <span>
-                    {r.studyDate} 스터디 ·{" "}
-                    {weekLabel(Number(r.studyDate.slice(5, 7)), r.weekOfMonth)}
+                    {r.year}년 {weekLabel(r.month, r.weekOfMonth)}
                   </span>
                   <Button
                     type="button"

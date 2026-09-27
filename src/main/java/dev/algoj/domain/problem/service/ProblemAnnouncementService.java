@@ -2,7 +2,7 @@ package dev.algoj.domain.problem.service;
 
 import dev.algoj.domain.problem.dto.ProblemAnnouncementConfigResponse;
 import dev.algoj.domain.problem.dto.ProblemAnnouncementRecordResponse;
-import dev.algoj.domain.problem.dto.ProblemAnnouncementWeekResponse;
+import dev.algoj.domain.problem.dto.ProblemAnnouncementSuggestionResponse;
 import dev.algoj.domain.problem.entity.ProblemAnnouncement;
 import dev.algoj.domain.problem.repository.ProblemAnnouncementRepository;
 import dev.algoj.global.exception.BusinessException;
@@ -15,7 +15,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
-import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,10 +27,10 @@ import java.util.Map;
  * loopback, which the API container on algoj-net cannot reach. The webhook URL
  * is a secret — it only ever lives in .env on the server.
  *
- * The week number is "the nth study actually held that month", not a calendar
- * week: the study skips a week or two a month, and skipped weeks send no
- * notice. So it is one more than the study dates already recorded earlier in
- * the same month.
+ * The admin picks the month and week. The default week is "the nth study
+ * actually held that month", not a calendar week: the study skips a week or two
+ * a month and skipped weeks send no notice, so it is one past the highest week
+ * already recorded for that month.
  */
 @Slf4j
 @Service
@@ -58,14 +57,14 @@ public class ProblemAnnouncementService {
     }
 
     @Transactional(readOnly = true)
-    public ProblemAnnouncementWeekResponse weekOf(LocalDate studyDate) {
-        return new ProblemAnnouncementWeekResponse(
-                studyDate, studyDate.getMonthValue(), weekNumber(studyDate));
+    public ProblemAnnouncementSuggestionResponse suggest(int year, int month) {
+        return new ProblemAnnouncementSuggestionResponse(
+                year, month, repository.findMaxWeek(year, month) + 1);
     }
 
     @Transactional(readOnly = true)
     public List<ProblemAnnouncementRecordResponse> recent() {
-        return repository.findTop10ByOrderByStudyDateDescIdDesc().stream()
+        return repository.findTop10ByOrderByYearDescMonthDescWeekOfMonthDescIdDesc().stream()
                 .map(ProblemAnnouncementRecordResponse::from)
                 .toList();
     }
@@ -79,19 +78,14 @@ public class ProblemAnnouncementService {
 
     /** Sends first and records only after Discord accepted it. */
     @Transactional
-    public void announce(String content, LocalDate studyDate, boolean record) {
+    public void announce(String content, int year, int month, int weekOfMonth, boolean record) {
         if (webhookUrl.isEmpty()) {
             throw new BusinessException(ErrorCode.ANNOUNCE_NOT_CONFIGURED);
         }
         post(content);
         if (record) {
-            repository.save(ProblemAnnouncement.of(studyDate, weekNumber(studyDate), content));
+            repository.save(ProblemAnnouncement.of(year, month, weekOfMonth, content));
         }
-    }
-
-    private int weekNumber(LocalDate studyDate) {
-        long earlier = repository.countStudyDatesBetween(studyDate.withDayOfMonth(1), studyDate);
-        return (int) earlier + 1;
     }
 
     private void post(String content) {

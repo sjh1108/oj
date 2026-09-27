@@ -13,7 +13,6 @@ import org.springframework.test.json.JsonCompareMode;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -31,7 +30,6 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class ProblemAnnouncementServiceTest {
 
     private static final String WEBHOOK = "https://discord.test/api/webhooks/1/abc";
-    private static final LocalDate STUDY = LocalDate.of(2026, 10, 12);
 
     private final ProblemAnnouncementRepository repository = mock(ProblemAnnouncementRepository.class);
 
@@ -52,7 +50,7 @@ class ProblemAnnouncementServiceTest {
                         """, JsonCompareMode.STRICT))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
-        service(builder, WEBHOOK, "123").announce("<@&123> hi @everyone", STUDY, false);
+        service(builder, WEBHOOK, "123").announce("<@&123> hi @everyone", 2026, 10, 1, false);
 
         server.verify();
     }
@@ -68,24 +66,23 @@ class ProblemAnnouncementServiceTest {
                         """))
                 .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
-        service(builder, WEBHOOK, "").announce("hello", STUDY, false);
+        service(builder, WEBHOOK, "").announce("hello", 2026, 10, 1, false);
 
         server.verify();
     }
 
     @Test
-    void announce_recorded_savesStudyDateAndItsWeekNumber() {
+    void announce_recorded_savesTheChosenYearMonthWeek() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(WEBHOOK + "?wait=true")).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
-        // One study already announced earlier in October → this is the 2nd.
-        when(repository.countStudyDatesBetween(LocalDate.of(2026, 10, 1), STUDY)).thenReturn(1L);
 
-        service(builder, WEBHOOK, "123").announce("hello", STUDY, true);
+        service(builder, WEBHOOK, "123").announce("hello", 2026, 10, 2, true);
 
         ArgumentCaptor<ProblemAnnouncement> saved = ArgumentCaptor.forClass(ProblemAnnouncement.class);
         verify(repository).save(saved.capture());
-        assertThat(saved.getValue().getStudyDate()).isEqualTo(STUDY);
+        assertThat(saved.getValue().getYear()).isEqualTo(2026);
+        assertThat(saved.getValue().getMonth()).isEqualTo(10);
         assertThat(saved.getValue().getWeekOfMonth()).isEqualTo(2);
         assertThat(saved.getValue().getContent()).isEqualTo("hello");
     }
@@ -96,7 +93,7 @@ class ProblemAnnouncementServiceTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(WEBHOOK + "?wait=true")).andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
 
-        service(builder, WEBHOOK, "123").announce("hello", STUDY, false);
+        service(builder, WEBHOOK, "123").announce("hello", 2026, 10, 1, false);
 
         verify(repository, never()).save(any());
     }
@@ -107,7 +104,7 @@ class ProblemAnnouncementServiceTest {
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         server.expect(requestTo(WEBHOOK + "?wait=true")).andRespond(withStatus(HttpStatus.NOT_FOUND));
 
-        assertThatThrownBy(() -> service(builder, WEBHOOK, "123").announce("hello", STUDY, true))
+        assertThatThrownBy(() -> service(builder, WEBHOOK, "123").announce("hello", 2026, 10, 2, true))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ANNOUNCE_FAILED);
@@ -119,7 +116,7 @@ class ProblemAnnouncementServiceTest {
         ProblemAnnouncementService service = service(RestClient.builder(), "", "123");
 
         assertThat(service.config().enabled()).isFalse();
-        assertThatThrownBy(() -> service.announce("hello", STUDY, true))
+        assertThatThrownBy(() -> service.announce("hello", 2026, 10, 2, true))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ANNOUNCE_NOT_CONFIGURED);
@@ -134,12 +131,12 @@ class ProblemAnnouncementServiceTest {
     }
 
     @Test
-    void weekOf_firstStudyOfTheMonth_isWeekOne() {
-        when(repository.countStudyDatesBetween(LocalDate.of(2026, 10, 1), STUDY)).thenReturn(0L);
+    void suggest_isOnePastTheHighestWeekSentThatMonth() {
+        when(repository.findMaxWeek(2026, 10)).thenReturn(0);
+        when(repository.findMaxWeek(2026, 9)).thenReturn(3);
+        ProblemAnnouncementService service = service(RestClient.builder(), WEBHOOK, "123");
 
-        var week = service(RestClient.builder(), WEBHOOK, "123").weekOf(STUDY);
-
-        assertThat(week.month()).isEqualTo(10);
-        assertThat(week.weekOfMonth()).isEqualTo(1);
+        assertThat(service.suggest(2026, 10).weekOfMonth()).isEqualTo(1);
+        assertThat(service.suggest(2026, 9).weekOfMonth()).isEqualTo(4);
     }
 }
