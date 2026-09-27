@@ -105,6 +105,11 @@ bot:
 
 discord:
   link-code-ttl-seconds: ${DISCORD_LINK_CODE_TTL_SECONDS:600}
+  # 선정 문제 알림 (관리자 일괄 업로드 화면의 버튼). 채널 설정 → 연동 → 웹후크에서 만든 URL.
+  # 비워 두면 버튼이 꺼진다.
+  problem-webhook-url: ${DISCORD_PROBLEM_WEBHOOK_URL:}
+  # 알림 맨 앞에 멘션할 역할 ID. 이 역할만 울리고 @everyone 등은 막는다.
+  problem-role-id: ${DISCORD_PROBLEM_ROLE_ID:}
 
 ---
 spring:

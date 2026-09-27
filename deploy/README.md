@@ -349,6 +349,28 @@ docker compose -f docker-compose.bot.yml --env-file .env up -d --force-recreate 
 > `docker-compose.bot.yml`이 없으면 repo의 `deploy/docker-compose.bot.yml`을 그대로 올려두면
 > 된다 — CD는 `deploy-api.sh`만 복사하고 봇 compose는 건드리지 않는다.
 
+### 선정 문제 알림 — 일괄 업로드 화면의 버튼
+
+관리자 **문제 일괄 업로드** 화면에서 등록이 끝나면 "선정 문제 알림" 카드가 나온다.
+**알림 작성**을 누르면 등록한 문제가 목록 순서대로 3개씩 Set으로 묶이고 Easy · Medium ·
+Hard가 붙은 초안이 채워지고, 고친 뒤 **디스코드로 보내기**로 올린다.
+
+봇이 아니라 **채널 웹훅**으로 보낸다. 봇의 공지 리스너는 박스의 루프백에만 열려 있어
+`algoj-net` 안의 API 컨테이너에서는 닿지 않기 때문이다.
+
+설정 (1회): `/opt/algoj/.env`에 두 값을 넣고 API를 재배포(`bash deploy-api.sh`)한다.
+
+```bash
+# 채널 설정 → 연동 → 웹후크 → 새 웹후크 → (이름·프로필 지정) → 웹후크 URL 복사
+DISCORD_PROBLEM_WEBHOOK_URL=https://discord.com/api/webhooks/...
+# 개발자 모드 켠 뒤 서버 설정 → 역할 → 멘션할 역할 우클릭 → ID 복사
+DISCORD_PROBLEM_ROLE_ID=1528378236780806306
+```
+
+- 웹훅 URL은 비밀이다 — 아는 사람은 누구나 그 채널에 글을 쓸 수 있다. `.env`에만 둔다.
+- 멘션은 `DISCORD_PROBLEM_ROLE_ID` 역할만 울린다. 초안을 고치다 `@everyone`을 넣어도 울리지 않는다.
+- URL이 없으면 카드에 "웹훅이 설정되지 않음"이 표시되고 버튼이 꺼진다.
+
 ### 사용 흐름 (회원)
 
 1. OJ 로그인 → 우상단 본인 이름(`/account`) → **디스코드 연동 → 연동 코드 발급**

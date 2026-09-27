@@ -11,3 +11,18 @@ export const adminApi = {
       body,
     }),
 };
+
+export interface ProblemAnnouncementConfig {
+  enabled: boolean;
+  roleId: string | null;
+}
+
+export const problemAnnouncementApi = {
+  config: () =>
+    api<ProblemAnnouncementConfig>("/api/admin/problem-announcements/config"),
+  send: (content: string) =>
+    api<void>("/api/admin/problem-announcements", {
+      method: "POST",
+      body: { content },
+    }),
+};
