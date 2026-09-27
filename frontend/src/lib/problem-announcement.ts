@@ -7,7 +7,8 @@
  * before sending.
  *
  * The week ("10월 1주차") is not a calendar week: it is the nth study actually
- * held that month, which the server counts from past notices.
+ * held that month. The admin picks it; the default is one past the highest
+ * week already sent that month.
  */
 
 export interface AnnouncedProblem {
@@ -54,13 +55,23 @@ export function replaceWeekLabel(draft: string, label: string): string {
   return HEADING.test(draft) ? draft.replace(HEADING, headingLine(label)) : draft;
 }
 
-/** yyyy-MM-dd of the next Monday after today (local time) — the usual study day. */
-export function nextMondayIso(today = new Date()): string {
+/** Month of the next Monday after today (local time) — the usual study day. */
+export function defaultAnnounceMonth(today = new Date()): {
+  year: number;
+  month: number;
+} {
   const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   d.setDate(d.getDate() + (((8 - d.getDay()) % 7) || 7));
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
+  return { year: d.getFullYear(), month: d.getMonth() + 1 };
+}
+
+/**
+ * Year a picked month belongs to: this year, unless the month is well behind
+ * the current one — choosing January in December means next January.
+ */
+export function yearForMonth(month: number, today = new Date()): number {
+  const current = today.getMonth() + 1;
+  return current - month > 6 ? today.getFullYear() + 1 : today.getFullYear();
 }
 
 /** Discord rejects messages longer than this. */
