@@ -92,7 +92,7 @@ AWS_REGION=ap-northeast-2
 ```
 
 ```bash
-sudo systemctl restart algoj-api
+cd /opt/algoj && bash deploy-api.sh   # .env는 컨테이너를 새로 띄울 때만 읽힌다
 ```
 
 동작 확인: 관리자로 로그인 → 문제 출제 → 지문의 **이미지 첨부** 버튼으로 업로드
