@@ -9,8 +9,8 @@
 # Run on the box (CD does this over SSH):
 #   IMAGE=ghcr.io/sjh1108/oj-api:latest bash /opt/algoj/deploy-api.sh
 #
-# Requires: docker, an external DB (RDS via DB_HOST in .env), RabbitMQ reachable
-# via RABBITMQ_HOST in .env (runs on the JJ box), the nginx files from
+# Requires: docker, MySQL + RabbitMQ from docker-compose.oci.yml (on algoj-net,
+# reached as DB_HOST=mysql / RABBITMQ_HOST=rabbitmq from .env), the nginx files from
 # deploy/nginx/ installed in /etc/nginx/conf.d, and passwordless sudo for
 # `nginx` + writing the upstream conf (see deploy/README.md).
 set -euo pipefail
@@ -22,10 +22,9 @@ UPSTREAM_CONF="${UPSTREAM_CONF:-/etc/nginx/conf.d/algoj-upstream.conf}"
 MYSQL_CONTAINER="${MYSQL_CONTAINER:-algoj-mysql}"
 BLUE_PORT=8081
 GREEN_PORT=8082
-# Deploys run no-overlap (cd.yml sets NO_OVERLAP=1) because this 1.9GB box can't
-# run two JVMs at once even with MySQL/Judge0 offloaded. A solo boot is ~1.5-2min
-# now that the box is light (was ~350-400s when everything shared 2GB); 200s is a
-# safe ceiling that avoids a premature rollback (which would double the downtime).
+# Cold boot takes up to ~1.5-2min on a small box; 200s is a safe ceiling that
+# avoids a premature rollback. NO_OVERLAP=1 (stop old before boot) exists for
+# boxes too small to run two JVMs at once — the 12GB box does not need it.
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-200}"   # seconds to wait for new container health
 DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-60}"     # graceful stop window for the old container
 MEM_THRESHOLD_MB="${MEM_THRESHOLD_MB:-700}"  # below this available RAM → shrink heap
@@ -97,11 +96,9 @@ run_args=(
   --name "$new_name"
   --restart unless-stopped
   --env-file "$ENV_FILE"
-  # DB_HOST/DB_PORT, JUDGE0_URL and RABBITMQ_HOST all come from .env now — the
-  # DB is on RDS and both Judge0 and RabbitMQ live on the JJ box. Nothing on the
-  # OJ box shares a docker network with the API anymore (nginx reaches it via the
-  # published loopback port, the Discord bot via host-network loopback), so the
-  # container runs on the default bridge with no per-container host overrides.
+  # DB_HOST/DB_PORT, JUDGE0_URL and RABBITMQ_HOST all come from .env — no
+  # per-container host overrides. nginx reaches the API via the published
+  # loopback port, the Discord bot via host-network loopback.
   -p "127.0.0.1:${new_port}:8080"
 )
 

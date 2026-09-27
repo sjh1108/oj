@@ -1,5 +1,7 @@
 # AWS 데이터 회수 절차 (유료 전환 후)
 
+> **완료됨 (2026-09).** 회수와 AWS 리소스 정리까지 끝났다. 기록으로만 남긴다.
+
 무료 크레딧이 끊겨 멈춘 AWS 계정을 **일시적으로 유료 전환해** 남은 데이터를 꺼내오고,
 새 박스(Oracle Ampere)로 옮긴 뒤 AWS를 정리한다. 이전 자체는 이미 끝났고
 ([`oracle-cloud-migration.md`](oracle-cloud-migration.md)) 서비스는 빈 DB로 돌고 있다.
