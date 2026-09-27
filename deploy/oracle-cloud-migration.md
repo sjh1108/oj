@@ -296,16 +296,20 @@ bash deploy-api.sh
 
 ## 컷오버 체크리스트
 
-- [ ] `uname -m` 확인, 채점기 경로 결정(1단계)
-- [ ] RDS 덤프·S3 이미지 확보(2단계) — **AWS 리소스가 살아 있는 동안**
-- [ ] 보안 목록 + iptables 80/443
-- [ ] `docker-compose.oci.yml` 기동, mysql·rabbitmq healthy
-- [ ] 덤프 import 후 문제·제출 건수 확인
-- [ ] 채점기 기동 + `selftest.py` 통과 (PyPy 수동 등록은 이제 불필요)
-- [ ] DuckDNS IP 재지정, certbot 인증서 발급
-- [ ] CD Secrets 교체 후 수동 배포 1회 → `/api/health` 200
-- [ ] 웹에서 로그인 → 문제 열람 → **제출이 실제로 채점되는지**
-- [ ] 봇 `/서버상태` 정상 응답
+> **완료 (2026-09-27 재확인).** 덤프(9/14) 대비 운영 DB 건수는 users 11=11, problems 76→88,
+> submissions 198→238, test_cases 819→1022(이전 뒤 늘어난 만큼), Flyway V6=V6. `selftest.py` 전 항목 통과,
+> 봇 `/서버상태`에서 DB·채점기 정상, 워커 2·DLQ 0 확인.
+
+- [x] `uname -m` 확인, 채점기 경로 결정(1단계)
+- [x] RDS 덤프·S3 이미지 확보(2단계) — **AWS 리소스가 살아 있는 동안**
+- [x] 보안 목록 + iptables 80/443
+- [x] `docker-compose.oci.yml` 기동, mysql·rabbitmq healthy
+- [x] 덤프 import 후 문제·제출 건수 확인
+- [x] 채점기 기동 + `selftest.py` 통과 (PyPy 수동 등록은 이제 불필요)
+- [x] DuckDNS IP 재지정, certbot 인증서 발급
+- [x] CD Secrets 교체 후 수동 배포 1회 → `/api/health` 200
+- [x] 웹에서 로그인 → 문제 열람 → **제출이 실제로 채점되는지**
+- [x] 봇 `/서버상태` 정상 응답
 
 ## 되돌리기
 
