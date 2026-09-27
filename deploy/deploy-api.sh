@@ -43,11 +43,11 @@ new_name="algoj-api-$new_color"
 old_name="algoj-api-$old_color"
 log "active=${active_port:-none} → deploying $new_color on $new_port ($IMAGE)"
 
-# 2. Memory pre-flight: the box is small (≈2GB) and blue-green briefly runs two
-#    JVMs at once. Without an explicit -Xmx the JVM grabs ~25% of host RAM
-#    (~500MB) each, so the overlap forces the whole box into swap and the pages
-#    never drain. Always cap the heap; shrink further only when available RAM is
-#    already tight at deploy time. An explicit JAVA_OPTS still overrides both.
+# 2. Memory pre-flight: blue-green briefly runs two JVMs at once. Without an
+#    explicit -Xmx each JVM grabs ~25% of host RAM, which on a small box (the old
+#    ≈2GB one) forced the whole box into swap. Always cap the heap; shrink further
+#    only when available RAM is already tight at deploy time. An explicit
+#    JAVA_OPTS still overrides both.
 # SerialGC + C1-only JIT: on this tiny box G1's region metadata and the C2
 # compiler threads are pure overhead. SerialGC has the smallest native-memory
 # footprint and C1-only cuts startup compilation — both ease the swap pressure
@@ -78,7 +78,7 @@ if [ -z "$java_opts" ]; then
 fi
 
 # 3. Pull the new image. Wait for the local MySQL container only if it exists —
-#    with an external DB (RDS via DB_HOST in .env) there is no such container.
+#    with an external DB (reached by DB_HOST in .env) there is no such container.
 docker pull "$IMAGE"
 if docker inspect "$MYSQL_CONTAINER" >/dev/null 2>&1; then
   log "waiting for $MYSQL_CONTAINER healthy..."

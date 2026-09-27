@@ -12,7 +12,7 @@ import java.util.Optional;
 public interface TestCaseRepository extends JpaRepository<TestCase, Long> {
 
     // Problem-detail shows only sample cases. Loading the full collection would
-    // drag every hidden case's LONGTEXT input/output over the wire (slow on RDS).
+    // drag every hidden case's LONGTEXT input/output over the wire (slow for large problems).
     List<TestCase> findByProblemIdAndIsSampleTrueAndIsDraftFalseOrderByOrderIndexAsc(Long problemId);
 
     // Chunked upload appends run as in-place CONCAT updates: loading the entity
