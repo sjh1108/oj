@@ -25,9 +25,9 @@ import java.util.List;
  */
 @Slf4j
 @Component
-// Multi-box (OJ+EOJ) safety: run the sweeper on ONE box only. Boxes with
-// SWEEPER_ENABLED=false skip creating this bean, so its @Scheduled never
-// registers there. Default (missing) = enabled, so single-box stays unchanged.
+// If the API ever runs on more than one box, run the sweeper on ONE of them:
+// SWEEPER_ENABLED=false skips creating this bean, so its @Scheduled never
+// registers there. Default (missing) = enabled, which is what a single box wants.
 @ConditionalOnProperty(name = "judge.sweeper-enabled", havingValue = "true", matchIfMissing = true)
 @RequiredArgsConstructor
 public class PendingSubmissionSweeper {

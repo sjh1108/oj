@@ -70,8 +70,8 @@ judge0:
     max-file-size-kb: ${JUDGE0_JUDGE_MAX_FILE_SIZE_KB:4096}
 
 judge:
-  # Stale-PENDING requeue sweeper (PendingSubmissionSweeper). In a multi-box
-  # (OJ+EOJ) deployment run it on ONE box only — set SWEEPER_ENABLED=false on the
+  # Stale-PENDING requeue sweeper (PendingSubmissionSweeper). If the API runs on
+  # more than one box, run it on ONE only — set SWEEPER_ENABLED=false on the
   # others. Requeuing is idempotent (harmless if it double-runs), so this only
   # avoids the waste of two boxes requeuing the same stale submissions.
   sweeper-enabled: ${SWEEPER_ENABLED:true}
