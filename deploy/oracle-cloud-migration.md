@@ -158,7 +158,7 @@ docker compose -f docker-compose.oci.yml ps     # mysql·rabbitmq healthy 확인
 # 2단계 덤프가 있으면
 docker exec -i algoj-mysql mysql -ualgoj -p"$DB_PASSWORD" algoj < algoj-YYYY-MM-DD.sql
 docker exec -i algoj-mysql mysql -ualgoj -p"$DB_PASSWORD" -e \
-  "SELECT COUNT(*) FROM problem; SELECT COUNT(*) FROM submission;" algoj
+  "SELECT COUNT(*) FROM problems; SELECT COUNT(*) FROM submissions;" algoj
 ```
 
 스키마는 **Flyway**가 API 부팅 시 맞춘다. 덤프에 `flyway_schema_history`가 같이 들어오므로
