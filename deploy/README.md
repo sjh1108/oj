@@ -27,7 +27,7 @@ AWS 무료 크레딧이 끊기면서 네 조각(OJ·EOJ·JJ·RDS)으로 흩어�
 
 ```
 /opt/algoj/
-├── .env                        # 비밀 (chmod 600)
+├── .env                        # 비밀 (chmod 600) — 양식은 deploy/.env.prod.example
 ├── backup.env                  # DB 백업 업로드 설정 (chmod 600, 선택) — backup.md
 ├── rclone/rclone.conf          # Google Drive 로그인 토큰 (chmod 700 디렉터리) — backup.md
 ├── repo/                       # 이 저장소 클론 — compose 파일과 스크립트의 출처
@@ -109,10 +109,16 @@ cd /opt/algoj && IMAGE=ghcr.io/sjh1108/oj-api:latest bash deploy-api.sh
 ### `cd.yml` — `master` push 시 배포
 1. **test**: 백엔드 테스트 재실행.
 2. **build-and-push**: 이미지 빌드 후 `ghcr.io/<owner>/oj-api:latest` + `:sha-<커밋>`로 push.
+   봇 이미지(`oj-bot`)도 같이 빌드·push한다(봇 재기동은 수동, 아래 [3단계](#3단계--봇-실행)).
    GHCR 인증은 Actions 기본 `GITHUB_TOKEN`을 사용.
 3. **deploy** (`DEPLOY_ENABLED=true`일 때만): `deploy-api.sh`를 박스로 복사한 뒤 SSH로 실행한다.
    **blue-green**으로 교체한다(아래 [무중단 배포](#무중단-배포-blue-green) 참고).
 4. **공지**: 배포 성공 시 PR 본문의 `## 공지` 섹션만 디스코드 공지 채널에 게시한다.
+
+### `judge-images.yml` — 채점기 이미지
+`judge-runner/**`가 바뀐 PR·master push에서 러너 로직 테스트 후, `oj-judge-runner`·`oj-judge-sandbox`를
+arm64·amd64 네이티브 러너에서 따로 빌드해 멀티아키 매니페스트로 합쳐 push한다(PR에서는 빌드까지만).
+박스 반영은 수동 — [`judge-runner/README.md`](../judge-runner/README.md#박스에-올리기).
 
 ### 필요한 GitHub Secrets / Variables
 

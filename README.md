@@ -15,6 +15,7 @@
 - **풀이 공유**: 문제를 맞힌 사람에게만 다른 사람의 정답 코드 공개
 - **테스트케이스 생성기**: 제너레이터 + 모범 답안 코드를 실행해 테스트케이스 자동 생성
 - **Discord 봇**: 계정 연동, 비밀번호 재설정, `/서버상태` 모니터링, master 머지 시 업데이트 자동 공지
+- **선정 문제 알림**: 관리자 일괄 업로드 화면에서 그 주 선정 문제를 디스코드 채널에 공유 (웹훅)
 - **계정**: JWT(access + silent refresh) 인증, 관리자 회원 관리
 
 ## 아키텍처
@@ -82,7 +83,7 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 │   ├── docker-compose*.yml # 로컬 인프라 · 운영(MySQL+RabbitMQ) · 채점기 · Discord 봇
 │   └── archive/          #   AWS 시절 설계·이전 기록 (현재 구성 아님)
 ├── scripts/dev.sh        # 로컬 백엔드 실행 스크립트
-└── .github/workflows/    # ci.yml (검증) · cd.yml (배포)
+└── .github/workflows/    # ci.yml (검증) · cd.yml (배포) · judge-images.yml (채점기 이미지)
 ```
 
 ## 로컬 개발
@@ -90,7 +91,11 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 ### 0. 사전 준비
 
 - JDK 21, Node 20+, Docker
-- Judge0 인스턴스 (로컬 실행 또는 운영 박스로 SSH 터널: `ssh -L 2358:localhost:2358 <박스>`)
+- 채점기 — 운영 박스의 judge-runner로 SSH 터널. 러너는 호스트 포트를 열지 않으므로 컨테이너 IP로 잇는다:
+  ```bash
+  ssh <박스> "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' algoj-judge-runner"
+  ssh -L 2358:<위 IP>:2358 <박스>
+  ```
 
 ### 1. 환경 변수
 

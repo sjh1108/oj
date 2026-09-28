@@ -184,7 +184,7 @@ AWS_SECRET_ACCESS_KEY=<...>
 - **네 항목을 모두 비우면 예전처럼 AWS S3로 붙는다** — 기존 동작은 그대로다.
 - 옮긴 뒤 기존 지문에 박힌 URL 치환 (백업 먼저):
   ```sql
-  UPDATE problem
+  UPDATE problems
      SET description = REPLACE(description,
            'https://algoj-images.s3.ap-northeast-2.amazonaws.com/',
            'https://<새 공개 주소>/algoj-images/');

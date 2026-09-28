@@ -5,7 +5,7 @@
 #   cd /opt/algoj
 #   docker compose -f docker-compose.judge.yml --env-file .env pull
 #   docker compose -f docker-compose.judge.yml --env-file .env up -d
-#   curl -s http://127.0.0.1:2358/languages
+#   python3 repo/judge-runner/selftest.py   # 포트를 열지 않아 호스트 curl 127.0.0.1은 안 닿는다
 #
 # .env on the box then points the API at it:
 #   JUDGE0_URL=http://judge-runner:2358
