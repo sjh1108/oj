@@ -38,6 +38,7 @@ AWS 무료 크레딧이 끊기면서 네 조각(OJ·EOJ·JJ·RDS)으로 흩어�
 ├── mysql-data/                 # MySQL 데이터
 ├── rabbitmq-data/              # 브로커 데이터 (durable 큐)
 ├── judge-work/                 # 채점 작업 디렉터리 (실행 후 비워진다)
+├── images/                     # 지문 이미지 (API가 /images/** 로 서빙) — 아래 "지문 이미지"
 ├── backups/                    # DB 백업 최근 7개 (cron, backup-db.sh)
 └── backup.log                  # 백업 실행 기록
 ```
@@ -82,6 +83,21 @@ cp /opt/algoj/repo/deploy/docker-compose.{oci,judge,bot}.yml /opt/algoj/
 MySQL이 박스 안에 있으므로 백업도 직접 한다. `deploy/backup-db.sh`를 cron으로 매일 돌려
 박스에 7개를 보관하고, 설정하면 Google Drive(rclone)로도 올린다. 설치·복구 절차는
 [`backup.md`](backup.md).
+
+## 지문 이미지
+
+관리자가 올린 지문 이미지는 **박스 디스크 `/opt/algoj/images/problems/<uuid>.<확장자>`** 에
+저장되고, API가 `https://algoj.duckdns.org/images/problems/...`로 직접 서빙한다. nginx는 이미
+모든 경로를 API로 넘기므로 따로 설정할 게 없다.
+
+- `deploy-api.sh`가 이 디렉터리를 만들어 blue·green 컨테이너에 똑같이 `/data/images`로
+  마운트하고 `IMAGE_DIR`을 넣는다 — 한쪽에서 올린 이미지가 전환 뒤에도 그대로 있다.
+- `.env`에는 공개 주소만 둔다: `IMAGE_PUBLIC_BASE_URL=https://algoj.duckdns.org/images`.
+  없으면 업로드만 503(`I003`)을 내고 나머지는 정상이다.
+- 파일 이름이 무작위 UUID라 URL을 알아야만 열린다(목록 없음). 1년 캐시(`immutable`)를 건다.
+  SVG를 주소로 직접 열어도 스크립트가 돌지 않도록 `/images/**` 응답에는 CSP `sandbox`를 붙인다.
+- **백업**: DB 백업이 Google Drive로 올라갈 때 이 디렉터리도 `<원격>/images`로 복사된다
+  ([`backup.md`](backup.md)). 이미지는 지우지 않으므로 원격에서도 정리하지 않는다.
 
 ## 운영 명령 cheat sheet
 

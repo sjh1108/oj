@@ -11,6 +11,7 @@
 # 3. 최근 BACKUP_KEEP 개만 남기고 오래된 로컬 백업 삭제
 # 4. backup.env 에 업로드 대상이 있으면 박스 밖으로 올린다
 #    - BACKUP_RCLONE_REMOTE: rclone 으로 Google Drive 등 (오래된 원격 백업도 정리)
+#      지문 이미지($IMAGE_DIR)도 <원격>/images 로 함께 복사한다 — DB 덤프에는 URL만 있다.
 #    - BACKUP_S3_BUCKET:     S3 호환 스토리지
 #
 # 로컬 백업만으로는 박스가 통째로 사라지는 경우를 못 막는다 — 4번을 켜 두는 게 목표다.
@@ -25,6 +26,8 @@ BACKUP_DIR="${BACKUP_DIR:-$APP_DIR/backups}"
 BACKUP_KEEP="${BACKUP_KEEP:-7}"
 # 정상 덤프는 수백 MB다. 이보다 작으면 무언가 잘못된 것이다(빈 DB, 권한 오류 등).
 MIN_BYTES="${BACKUP_MIN_BYTES:-1048576}"
+# 지문 이미지 — deploy-api.sh 가 API 컨테이너에 마운트하는 디렉터리.
+IMAGE_DIR="${IMAGE_DIR:-$APP_DIR/images}"
 
 log() { echo "[backup $(date '+%F %T')] $*"; }
 fail() { echo "[backup $(date '+%F %T')] FAIL: $*" >&2; exit 1; }
@@ -96,15 +99,25 @@ upload_rclone() {
 
     # ubuntu 사용자로 돌린다 — rclone 은 토큰을 갱신할 때 설정 파일을 다시 쓰는데,
     # root 로 돌면 그 파일이 root 소유가 돼 다음부터 손으로 고칠 수 없다.
+    local image_mount=()
+    [ -d "$IMAGE_DIR" ] && image_mount=(-v "$IMAGE_DIR:/images:ro")
     rclone() {
         docker run --rm --user "$(id -u):$(id -g)" \
             -v "$rclone_dir:/config/rclone" \
             -v "$BACKUP_DIR:/backups:ro" \
+            "${image_mount[@]}" \
             rclone/rclone --config /config/rclone/rclone.conf "$@"
     }
 
     log "업로드: $remote/$name"
     rclone copyto "/backups/$name" "$remote/$name" || { log "FAIL: rclone 업로드 실패"; return 1; }
+
+    # 이미지는 이름(UUID)이 바뀌지 않으니 copy 로 새 파일만 올린다. 지우지 않으므로 sync 가 아니다.
+    if [ "${#image_mount[@]}" -gt 0 ]; then
+        log "지문 이미지 복사: $IMAGE_DIR → $remote/images"
+        rclone copy /images "$remote/images" --exclude '.upload-*' \
+            || { log "FAIL: 이미지 업로드 실패"; return 1; }
+    fi
 
     # 드라이브에는 S3 같은 자동 삭제 규칙이 없어서 여기서 직접 지운다.
     # 휴지통으로 보내면 용량을 계속 차지하므로 바로 지운다 (Google Drive 기준 옵션).

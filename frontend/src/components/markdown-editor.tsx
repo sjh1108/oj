@@ -21,7 +21,7 @@ type Props = {
   minHeight?: number;
   className?: string;
   previewEmptyText?: string;
-  // Show an "이미지 첨부" button that uploads to S3 (admin-only API) and
+  // Show an "이미지 첨부" button that uploads to the image store (admin-only API) and
   // inserts ![alt](url) markdown at the cursor.
   imageUpload?: boolean;
 };

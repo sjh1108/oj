@@ -9,6 +9,7 @@ public enum ErrorCode {
     // Common
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "C001", "입력값이 올바르지 않습니다."),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "C002", "서버 내부 오류가 발생했습니다."),
+    NOT_FOUND(HttpStatus.NOT_FOUND, "C003", "존재하지 않는 경로입니다."),
 
     // Auth / User
     USERNAME_DUPLICATED(HttpStatus.CONFLICT, "U001", "이미 사용 중인 아이디입니다."),
@@ -42,7 +43,7 @@ public enum ErrorCode {
     // Problem images (S3)
     IMAGE_TOO_LARGE(HttpStatus.BAD_REQUEST, "I001", "이미지가 너무 큽니다. (최대 700KB)"),
     IMAGE_TYPE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "I002", "지원하지 않는 이미지 형식입니다. (png/jpeg/gif/webp/svg)"),
-    IMAGE_STORAGE_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "I003", "이미지 저장소(S3)가 설정되지 않았습니다."),
+    IMAGE_STORAGE_NOT_CONFIGURED(HttpStatus.SERVICE_UNAVAILABLE, "I003", "이미지 저장소가 설정되지 않았습니다."),
 
     // Discord
     INVALID_LINK_CODE(HttpStatus.BAD_REQUEST, "D001", "유효하지 않거나 만료된 연동 코드입니다."),

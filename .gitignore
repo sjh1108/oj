@@ -51,3 +51,4 @@ out/
 # Python (judge-runner)
 __pycache__/
 *.pyc
+/data/

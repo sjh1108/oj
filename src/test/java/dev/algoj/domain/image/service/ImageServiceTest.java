@@ -7,6 +7,7 @@ import dev.algoj.global.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -17,12 +18,16 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Base64;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -105,6 +110,39 @@ class ImageServiceTest {
     @Test
     void upload_failsClosedWhenS3NotConfigured() {
         when(s3ClientProvider.getIfAvailable()).thenReturn(null);
+
+        assertThatThrownBy(() -> service.upload(
+                new UploadImageRequest("image/png", b64(new byte[]{1}))))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.IMAGE_STORAGE_NOT_CONFIGURED);
+    }
+
+    @Test
+    void upload_writesToLocalDir_andReturnsUrlUnderPublicBase(@TempDir Path dir) throws Exception {
+        ReflectionTestUtils.setField(service, "localDir", dir.toString());
+        ReflectionTestUtils.setField(service, "localPublicBaseUrl", "https://algoj.duckdns.org/images/");
+
+        UploadImageResponse res = service.upload(
+                new UploadImageRequest("image/png", b64(new byte[]{1, 2, 3})));
+
+        assertThat(res.url()).startsWith("https://algoj.duckdns.org/images/problems/").endsWith(".png");
+        String key = res.url().substring("https://algoj.duckdns.org/images/".length());
+        Path file = dir.resolve(key);
+        assertThat(Files.readAllBytes(file)).containsExactly(1, 2, 3);
+        // nginx·rclone이 다른 사용자로 읽는다.
+        assertThat(PosixFilePermissions.toString(Files.getPosixFilePermissions(file))).isEqualTo("rw-r--r--");
+        // 임시 파일이 남지 않는다.
+        try (var files = Files.list(file.getParent())) {
+            assertThat(files).containsExactly(file);
+        }
+        // 로컬이 설정되면 S3는 보지 않는다.
+        verifyNoInteractions(s3ClientProvider);
+    }
+
+    @Test
+    void upload_localDirWithoutPublicBaseUrl_isNotConfigured(@TempDir Path dir) {
+        ReflectionTestUtils.setField(service, "localDir", dir.toString());
 
         assertThatThrownBy(() -> service.upload(
                 new UploadImageRequest("image/png", b64(new byte[]{1}))))
