@@ -45,7 +45,7 @@ GET  /languages          ← 앱은 헬스체크로만 쓴다 (Judge0Client.isUp
 **컴파일 에러(6)** 로 잡혀야 앱의 상태 매핑과 맞는다.
 
 > **PyPy는 이제 박스 수동 작업이 필요 없다.** 예전 Judge0에서는 포터블 PyPy를 내려받아
-> 볼륨으로 물리고 `languages` 테이블에 직접 INSERT 해야 했다(`deploy/archive/judge0/README.md`).
+> 볼륨으로 물리고 `languages` 테이블에 직접 INSERT 해야 했다.
 > 여기서는 샌드박스 이미지에 들어 있다.
 
 ## 상태 코드

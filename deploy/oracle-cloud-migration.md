@@ -59,8 +59,8 @@ free -m; df -h  # 12GB인지, 부트 볼륨 여유가 있는지
 
 ## 2단계 — AWS에 남은 데이터 구출 (시간이 걸린 일)
 
-> 실제 회수는 [`archive/aws-data-recovery.md`](archive/aws-data-recovery.md)의 절차로 끝냈다
-> (2026-09, AWS 리소스 정리까지 완료).
+> 실제 회수는 2026-09에 끝났다 (AWS 리소스 정리까지 완료). 당시 절차는 git 히스토리의
+> `deploy/archive/aws-data-recovery.md`.
 
 크레딧 소진으로 **인스턴스가 정지**된 것과 **리소스가 삭제**된 것은 다르다. 콘솔에서 확인한다.
 

@@ -42,7 +42,7 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 
 - **무중단 배포는 한 박스 blue-green** — 새 컨테이너를 비어 있는 포트에 띄우고 `/api/health`가
   통과하면 nginx 업스트림을 갈아끼웁니다. 12GB라 JVM 두 개가 잠깐 겹쳐도 됩니다
-  (2GB 시절에는 스왑 때문에 불가능해 박스를 두 대로 나눴었습니다 → [`deploy/archive/redundancy.md`](deploy/archive/redundancy.md))
+  (2GB 시절에는 스왑 때문에 불가능해 박스를 두 대로 나눴었습니다)
 - **채점기는 자체 구현** — Judge0 공식 이미지가 amd64 전용이라 arm64에서 돌지 않아, 앱이 실제로
   쓰는 Judge0 API 두 개만 구현해 대체했습니다. 격리는 제출마다 새 컨테이너(네트워크 없음·
   capability 제거·읽기전용 루트·메모리/PID 상한)로 얻습니다 →
@@ -56,8 +56,7 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 - 지문 이미지는 박스 디스크에 저장하고 API가 `/images/**`로 직접 서빙합니다 (blue-green 두 색이 같은 디렉터리를 공유)
 - DB는 매일 덤프해 박스에 보관하고, 설정하면 지문 이미지와 함께 Google Drive로도 올립니다 →
   [`deploy/backup.md`](deploy/backup.md)
-- 이전 경위는 [`deploy/oracle-cloud-migration.md`](deploy/oracle-cloud-migration.md),
-  AWS 시절의 이중화·컴포넌트 분리 기록은 [`deploy/archive/`](deploy/archive/README.md)에 남아 있습니다
+- 이전 경위는 [`deploy/oracle-cloud-migration.md`](deploy/oracle-cloud-migration.md)에 있습니다
 
 ## 기술 스택
 
@@ -81,8 +80,7 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 │   ├── deploy-api.sh     #   한 박스 blue-green 배포 (CD가 실행)
 │   ├── backup-db.sh      #   DB 백업 (cron으로 매일)
 │   ├── nginx/            #   공개 사이트 · upstream 시드 · 내부 :8080 고정 진입점
-│   ├── docker-compose*.yml # 로컬 인프라 · 운영(MySQL+RabbitMQ) · 채점기 · Discord 봇
-│   └── archive/          #   AWS 시절 설계·이전 기록 (현재 구성 아님)
+│   └── docker-compose*.yml # 로컬 인프라 · 운영(MySQL+RabbitMQ) · 채점기 · Discord 봇
 ├── scripts/dev.sh        # 로컬 백엔드 실행 스크립트
 └── .github/workflows/    # ci.yml (검증) · cd.yml (배포) · judge-images.yml (채점기 이미지)
 ```

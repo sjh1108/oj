@@ -2,8 +2,9 @@
 
 모든 것이 **Oracle Cloud Ampere 한 박스(aarch64, 2 OCPU / 12GB)** 에서 돈다.
 AWS 무료 크레딧이 끊기면서 네 조각(OJ·EOJ·JJ·RDS)으로 흩어져 있던 구성을 여기로 합쳤다 —
-경위는 [`oracle-cloud-migration.md`](oracle-cloud-migration.md), AWS 시절의 설계·이전 기록은
-[`archive/`](archive/README.md).
+경위는 [`oracle-cloud-migration.md`](oracle-cloud-migration.md). AWS 시절의 설계·이전 기록
+(이중화, 컴포넌트 분리, Judge0 박스, S3 이미지, 데이터 회수)은 쓸 일이 없어 지웠다 — 필요하면
+git 히스토리에서 본다 (삭제 직전 커밋 `8201796`의 `deploy/archive/`).
 
 | 컴포넌트 | 어디에 | 비고 |
 |---|---|---|
