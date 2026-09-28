@@ -66,7 +66,7 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 | 백엔드 | Java 21, Spring Boot 3.5 (Web·Security·Data JPA·AMQP·Validation·Actuator), Flyway, JJWT |
 | 프론트엔드 | Next.js 14, React 18, TypeScript, Tailwind CSS 4, TanStack Query, Monaco Editor, react-markdown + KaTeX |
 | 인프라 | Oracle Cloud(Ampere/arm64), MySQL 8, RabbitMQ 4, 자체 채점기, Docker, nginx, GitHub Actions CI/CD |
-| 봇 | Node.js 20, discord.js 14 |
+| 봇 | Node.js 22, discord.js 14 |
 
 ## 저장소 구조
 
