@@ -5,7 +5,9 @@ AWS 시절에는 RDS가 자동 백업을 해 줬다. 지금 MySQL은 박스 안 
 문제·제출·계정이 그대로 사라진다.
 
 `deploy/backup-db.sh`가 매일 덤프를 떠서 박스에 7개를 보관하고, 설정돼 있으면 박스 밖
-(Google Drive, 또는 S3 호환 스토리지)으로도 올린다.
+(Google Drive, 또는 S3 호환 스토리지)으로도 올린다. Google Drive로 올릴 때는 박스 디스크에
+있는 **지문 이미지**(`/opt/algoj/images`)도 `<원격>/images`로 같이 복사한다 — 덤프에는 이미지
+URL만 들어 있다.
 
 ## PR로 자동 반영되는 것 / 박스에서 할 일
 
@@ -208,3 +210,12 @@ docker run --rm --user "$(id -u):$(id -g)" -v /opt/algoj/rclone:/config/rclone \
 ```
 
 박스가 통째로 사라진 경우에는 Google Drive 웹에서 파일을 내려받아 새 박스로 올리면 된다.
+
+지문 이미지는 파일 이름(UUID)이 지문의 URL에 그대로 박혀 있으므로, 폴더 구조를 유지한 채
+`/opt/algoj/images`로 되돌리면 된다.
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v /opt/algoj/rclone:/config/rclone \
+  -v /opt/algoj/images:/images rclone/rclone --config /config/rclone/rclone.conf \
+  copy gdrive:algoj-backups/images /images
+```

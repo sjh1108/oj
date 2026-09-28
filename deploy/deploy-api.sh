@@ -28,6 +28,10 @@ GREEN_PORT=8082
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-200}"   # seconds to wait for new container health
 DRAIN_TIMEOUT="${DRAIN_TIMEOUT:-60}"     # graceful stop window for the old container
 MEM_THRESHOLD_MB="${MEM_THRESHOLD_MB:-700}"  # below this available RAM → shrink heap
+# Statement images live on the box's disk and are shared by both colors, so an
+# upload on blue is still there after green takes over. The API serves them at
+# /images/** — .env only needs IMAGE_PUBLIC_BASE_URL (deploy/README.md).
+IMAGE_HOST_DIR="${IMAGE_HOST_DIR:-$APP_DIR/images}"
 
 log() { echo "[deploy-api] $*"; }
 
@@ -115,6 +119,8 @@ fi
 if [ -n "$java_opts" ]; then
   run_args+=(-e "JAVA_OPTS=$java_opts")
 fi
+mkdir -p "$IMAGE_HOST_DIR"
+run_args+=(-v "$IMAGE_HOST_DIR:/data/images" -e IMAGE_DIR=/data/images)
 
 # no-overlap: stop the OLD container before booting the new one. Two JVMs can't
 # coexist on this small box without thrashing swap past any health window, so we

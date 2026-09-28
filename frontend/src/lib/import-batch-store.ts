@@ -81,7 +81,7 @@ function persistableItems(items: ImportItem[]): ImportItem[] {
   let budget = PERSISTED_PARSED_BUDGET;
   return items.map((it) => {
     if (!it.parsed) return it;
-    // Images are already on S3 once the problem exists; never re-persist them.
+    // Images are already uploaded once the problem exists; never re-persist them.
     const parsed =
       it.createdId != null && it.parsed.assets
         ? { ...it.parsed, assets: undefined }

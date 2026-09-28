@@ -108,7 +108,7 @@ const toUpdateRequest = (p: ParsedProblem): UpdateProblemRequest => ({
   isPublic: true,
 });
 
-/** Pushes referenced images to S3 and rewrites ](asset:이름) to the returned URLs. */
+/** Uploads referenced images and rewrites ](asset:이름) to the returned URLs. */
 async function uploadAssets(
   parsed: ParsedProblem,
   onProgress: (text: string) => void,

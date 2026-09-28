@@ -8,7 +8,7 @@
 
 ## 주요 기능
 
-- **문제**: Markdown + KaTeX 수식 지원 출제, 태그/난이도 분류, 단일 `.md` 파일로 문제 업로드/다운로드, 지문 이미지 S3 업로드
+- **문제**: Markdown + KaTeX 수식 지원 출제, 태그/난이도 분류, 단일 `.md` 파일로 문제 업로드/다운로드, 지문 이미지 업로드(박스 디스크)
 - **채점**: 자체 채점기 기반 격리 실행 — 제출마다 새 컨테이너 (Python·PyPy3·C++·Java·C·JavaScript), IOI 스타일 서브태스크 부분 점수, 재채점
 - **채점 큐**: RabbitMQ durable 큐 — 재시작해도 채점 유실 없음, 워커 크래시 시 자동 재전달, 실패 메시지는 DLQ 격리, PENDING으로 남은 제출은 스위퍼가 주기적으로 재적재
 - **탐색**: 제목 검색, 난이도/태그/풀이 상태(맞음·도전 중·안 풂) 필터, 사용자별 해결 표시
@@ -53,7 +53,8 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 - 제출 → `judge.queue` 적재 → 리스너 워커가 꺼내 채점 → 결과 저장, 프론트는 폴링으로 갱신.
   PENDING으로 남은 제출은 스위퍼가 1분 주기로 재적재합니다
 - DB 스키마는 **Flyway**(`src/main/resources/db/migration/`)가 관리하고 Hibernate는 `validate`만 수행합니다
-- DB는 매일 덤프해 박스에 보관하고, 설정하면 Google Drive로도 올립니다 →
+- 지문 이미지는 박스 디스크에 저장하고 API가 `/images/**`로 직접 서빙합니다 (blue-green 두 색이 같은 디렉터리를 공유)
+- DB는 매일 덤프해 박스에 보관하고, 설정하면 지문 이미지와 함께 Google Drive로도 올립니다 →
   [`deploy/backup.md`](deploy/backup.md)
 - 이전 경위는 [`deploy/oracle-cloud-migration.md`](deploy/oracle-cloud-migration.md),
   AWS 시절의 이중화·컴포넌트 분리 기록은 [`deploy/archive/`](deploy/archive/README.md)에 남아 있습니다
@@ -62,7 +63,7 @@ AWS에서 이 박스로 옮길 때 애플리케이션 코드를 거의 건드리
 
 | 영역 | 스택 |
 |------|------|
-| 백엔드 | Java 21, Spring Boot 3.5 (Web·Security·Data JPA·AMQP·Validation·Actuator), Flyway, JJWT, AWS SDK v2 (S3 호환 스토리지) |
+| 백엔드 | Java 21, Spring Boot 3.5 (Web·Security·Data JPA·AMQP·Validation·Actuator), Flyway, JJWT |
 | 프론트엔드 | Next.js 14, React 18, TypeScript, Tailwind CSS 4, TanStack Query, Monaco Editor, react-markdown + KaTeX |
 | 인프라 | Oracle Cloud(Ampere/arm64), MySQL 8, RabbitMQ 4, 자체 채점기, Docker, nginx, GitHub Actions CI/CD |
 | 봇 | Node.js 20, discord.js 14 |

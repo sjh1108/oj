@@ -82,8 +82,15 @@ jwt:
   refresh-token-validity: ${JWT_REFRESH_TTL_MS:604800000}
 
 app:
+  # 지문 이미지 저장소. images.dir 이 있으면 박스 디스크에 저장하고 API가 /images/** 로 서빙한다
+  # (운영: deploy-api.sh 가 /opt/algoj/images 를 /data/images 로 마운트하고 IMAGE_DIR 을 넣는다).
+  # public-base-url 은 그 경로의 공개 주소 — 예: https://algoj.duckdns.org/images
+  # images.dir 도 s3.image-bucket 도 없으면 이미지 업로드 API가 503(I003)을 반환하고 나머지는 정상 동작.
+  images:
+    dir: ${IMAGE_DIR:}
+    public-base-url: ${IMAGE_PUBLIC_BASE_URL:}
   s3:
-    # 미설정이면 이미지 업로드 API가 503(I003)을 반환하고 나머지는 정상 동작.
+    # images.dir 이 비어 있을 때만 쓴다.
     image-bucket: ${S3_IMAGE_BUCKET:}
     region: ${AWS_REGION:ap-northeast-2}
     # AWS S3가 아닌 S3 호환 스토리지(OCI Object Storage·R2·MinIO)를 쓸 때만 채운다.
