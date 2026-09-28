@@ -1,5 +1,10 @@
 # 지문 이미지 S3 세팅 가이드
 
+> **보관용 — 지금은 이미지 스토리지가 없다.** 실제 버킷(`oj-oui`)은 AWS 정리 때 2026-09에 지웠고,
+> 이미지를 쓰던 문제는 31번 하나뿐이라 지문에서 뺐다. 지문 그림은 인라인 SVG로 넣는다.
+> 다시 스토리지가 필요하면 앱 코드는 그대로 두고 S3 호환 스토리지(OCI Object Storage·R2)를
+> `.env`로 붙이면 된다 → [`../oracle-cloud-migration.md`](../oracle-cloud-migration.md) 6단계.
+
 문제 지문 이미지는 AWS S3에 저장하고 브라우저가 S3에서 직접 로드한다.
 백엔드는 업로드(`POST /api/images`, ADMIN 전용)만 담당하고 조회 API는 없다.
 

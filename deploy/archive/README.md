@@ -11,6 +11,7 @@ JJ EC2 · RDS)으로 돌던 시절의 설계·이전 기록이다. 현재 구성
 | [`rabbitmq-to-jj-runbook.md`](rabbitmq-to-jj-runbook.md) | RabbitMQ를 JJ 박스로 옮긴 절차 |
 | [`judge0/`](judge0/README.md) | Judge0 박스 세팅 (PyPy 수동 등록, 메모리 제한) — 자체 채점기로 대체됨 |
 | [`docker-compose.jj.yml`](docker-compose.jj.yml) | JJ 박스의 RabbitMQ compose |
+| [`aws-s3-images.md`](aws-s3-images.md) | 지문 이미지 S3 버킷·IAM 세팅 — 버킷 삭제됨, 지금은 인라인 SVG |
 | [`aws-data-recovery.md`](aws-data-recovery.md) | 유료 전환 후 AWS 데이터 회수 — 2026-09 완료, AWS 리소스 정리까지 끝남 |
 
 두 박스 배포 스크립트(`rolling-deploy.sh`, `deploy-api-single.sh`, `nginx/render-upstream.sh`)와
