@@ -2,6 +2,9 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -41,7 +44,7 @@
     "@tailwindcss/postcss": "^4.2.4",
     "@tailwindcss/typography": "^0.5.19",
     "@types/katex": "^0.16.8",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "eslint": "^8",
