@@ -16,7 +16,6 @@ URL만 들어 있다.
 | 백업 스크립트 `deploy/backup-db.sh` | `repo` 갱신(`git pull`) 후 수동 1회 실행으로 검증 |
 | 업로드 설정 양식 `deploy/backup.env.example` | cron 등록 |
 | 복구·검증 절차 (이 문서) | (권장) Google OAuth 클라이언트 생성, Google Drive 연결(`rclone.conf`)·`/opt/algoj/backup.env` 작성 |
-| 실패 알림·`--check` (4절) | (권장) 관리자 채널 웹훅 생성, `backup.env`에 `BACKUP_ALERT_WEBHOOK` 추가, `--check` cron 등록 |
 
 CD는 `deploy-api.sh`만 박스로 복사한다. 백업 스크립트는 저장소 클론(`/opt/algoj/repo`)에서
 바로 실행하므로, 스크립트가 바뀌면 박스에서 `git pull`만 하면 된다.
@@ -222,7 +221,7 @@ docker run --rm --user "$(id -u):$(id -g)" -v /opt/algoj/rclone:/config/rclone \
   copy gdrive:algoj-backups/images /images
 ```
 
-## 4. 실패 알림 (권장) — 디스코드
+## 4. 실패 알림 — 디스코드
 
 백업 스크립트는 실패해도 `backup.log`에만 남긴다. Google 토큰이 끊기거나 디스크가 차서 매일
 실패해도 로그를 열어 보기 전에는 모른다. `backup.env`에 디스코드 웹훅을 넣으면:
@@ -240,32 +239,11 @@ docker run --rm --user "$(id -u):$(id -g)" -v /opt/algoj/rclone:/config/rclone \
 나가지 않는다. `--check`는 백업을 뜨지 않고 마지막 성공 시각(`backups/.last-success`)만 본다.
 단, 박스 자체나 cron 데몬이 죽으면 `--check`도 돌지 않으니 이것까지는 잡지 못한다.
 
-### 설정 (1회)
-
-1. 디스코드에 **관리자만 보는 채널**을 하나 만든다 (공지 채널과 섞지 않는다).
-2. 그 채널 **설정 → 연동 → 웹후크 → 새 웹후크** → **웹후크 URL 복사**.
-   URL을 아는 사람은 누구나 그 채널에 글을 쓸 수 있으니 저장소·채팅에 붙이지 않는다.
-3. 박스의 `backup.env`에 한 줄 추가하고, 알림이 실제로 오는지 본다.
-
-```bash
-cd /opt/algoj/repo && git pull
-echo 'BACKUP_ALERT_WEBHOOK=https://discord.com/api/webhooks/...' >> /opt/algoj/backup.env
-
-bash /opt/algoj/repo/deploy/backup-db.sh           # "완료" — backups/.last-success 가 생긴다
-bash /opt/algoj/repo/deploy/backup-db.sh --check   # "정상"
-
-# 전송 테스트 — 없는 원격으로 업로드를 한 번 실패시킨다 (🚨 실패 알림, 로컬 백업은 남는다)
-cp /opt/algoj/backup.env /tmp/backup.env.test
-sed -i 's/^BACKUP_RCLONE_REMOTE=.*/BACKUP_RCLONE_REMOTE=nosuchremote:x/' /tmp/backup.env.test
-BACKUP_ENV_FILE=/tmp/backup.env.test bash /opt/algoj/repo/deploy/backup-db.sh; rm /tmp/backup.env.test
-bash /opt/algoj/repo/deploy/backup-db.sh           # ✅ 복구 알림이 한 번 온다
-```
-
-4. `--check`를 cron에 추가한다. 백업(04:17) 뒤 한낮에 돌려, 이상하면 깨어 있을 때 알게 한다.
+박스에는 설정돼 있다 — `backup.env`의 `BACKUP_ALERT_WEBHOOK`(관리자 채널 웹훅)과 cron 한 줄:
 
 ```cron
-# 매일 12시 17분(KST) — 박스가 UTC면 17 3 * * * 로 쓴다
-17 12 * * * /opt/algoj/repo/deploy/backup-db.sh --check >> /opt/algoj/backup.log 2>&1
+# 매일 12시 17분(KST, 박스는 UTC) — 백업(04:17) 뒤 한낮에 확인
+17 3 * * * /opt/algoj/repo/deploy/backup-db.sh --check >> /opt/algoj/backup.log 2>&1
 ```
 
 기준 48시간이면 매일 백업이 **두 번 연속 돌지 않았을 때** 알린다 (한 번 실패는 실패 알림이
