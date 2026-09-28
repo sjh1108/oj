@@ -13,6 +13,14 @@
 #    - BACKUP_RCLONE_REMOTE: rclone 으로 Google Drive 등 (오래된 원격 백업도 정리)
 #      지문 이미지($IMAGE_DIR)도 <원격>/images 로 함께 복사한다 — DB 덤프에는 URL만 있다.
 #    - BACKUP_S3_BUCKET:     S3 호환 스토리지
+# 5. backup.env 에 BACKUP_ALERT_WEBHOOK(디스코드 웹훅)이 있으면 실패를 알린다.
+#    실패한 뒤 다시 성공하면 복구 알림도 한 번 보낸다.
+#
+#   bash /opt/algoj/repo/deploy/backup-db.sh --check
+#
+# 백업을 뜨지 않고 마지막 성공 시각만 본다. BACKUP_ALERT_STALE_HOURS(기본 48)시간 넘게
+# 성공 기록이 없으면 알린다 — cron 줄이 사라졌거나 스크립트가 아예 안 도는 경우는
+# 실패 알림으로는 잡히지 않아서 따로 둔다. 별도 cron 줄로 돌린다 (backup.md 4절).
 #
 # 로컬 백업만으로는 박스가 통째로 사라지는 경우를 못 막는다 — 4번을 켜 두는 게 목표다.
 set -euo pipefail
@@ -29,15 +37,112 @@ MIN_BYTES="${BACKUP_MIN_BYTES:-1048576}"
 # 지문 이미지 — deploy-api.sh 가 API 컨테이너에 마운트하는 디렉터리.
 IMAGE_DIR="${IMAGE_DIR:-$APP_DIR/images}"
 
-log() { echo "[backup $(date '+%F %T')] $*"; }
-fail() { echo "[backup $(date '+%F %T')] FAIL: $*" >&2; exit 1; }
+# 마지막 성공 시각(--check 가 본다)과, 실패 알림을 보낸 뒤 아직 복구되지 않았다는 표시.
+SUCCESS_STAMP="$BACKUP_DIR/.last-success"
+ALERT_OPEN="$BACKUP_DIR/.alert-open"
 
-[ -f "$ENV_FILE" ] || fail "$ENV_FILE 가 없다"
+# 이번 실행에서 나온 실패 이유 — 알림에 담는다.
+FAILS=()
+log() {
+    echo "[backup $(date '+%F %T')] $*"
+    case "$*" in FAIL:*) FAILS+=("${*#FAIL: }") ;; esac
+}
+fail() {
+    echo "[backup $(date '+%F %T')] FAIL: $*" >&2
+    FAILS+=("$*")
+    exit 1
+}
+
 env_value() { grep -m1 "^$1=" "$ENV_FILE" | cut -d= -f2- || true; }
 backup_value() {
     [ -f "$BACKUP_ENV_FILE" ] || return 0
     grep -m1 "^$1=" "$BACKUP_ENV_FILE" | cut -d= -f2- || true
 }
+
+# ─── 디스코드 알림 ──────────────────────────────────────────────
+# 알림이 실패해도 백업 결과(종료 코드)는 바뀌지 않는다 — 로그에 한 줄 남기고 넘어간다.
+json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/}"
+    s="${s//$'\t'/ }"
+    printf '%s' "$s"
+}
+notify() {
+    local url msg
+    url="$(backup_value BACKUP_ALERT_WEBHOOK)"
+    [ -n "$url" ] || return 0
+    msg="$1"
+    # 디스코드 메시지는 2000자까지다.
+    [ "${#msg}" -le 1900 ] || msg="${msg:0:1900}…"
+    # 웹훅 URL 자체가 비밀번호라 명령줄(ps)에 쓰지 않고 stdin 설정으로 넘긴다.
+    printf 'url = "%s"\n' "$url" \
+        | curl -K - -m 10 -fsS -o /dev/null -X POST \
+            -H 'Content-Type: application/json' \
+            --data-binary "{\"content\":\"$(json_escape "$msg")\"}" \
+        || echo "[backup $(date '+%F %T')] 경고: 디스코드 알림 전송 실패" >&2
+}
+
+# ─── --check: 마지막 성공이 너무 오래됐는지만 본다 ─────────────────
+if [ "${1:-}" = "--check" ]; then
+    stale_hours="$(backup_value BACKUP_ALERT_STALE_HOURS)"
+    stale_hours="${stale_hours:-48}"
+    last=""
+    if [ -f "$SUCCESS_STAMP" ]; then
+        last="$(stat -c %Y "$SUCCESS_STAMP")"
+    else
+        # 이 기능이 들어오기 전 백업 — 가장 최근 로컬 덤프로 대신한다.
+        newest="$(find "$BACKUP_DIR" -maxdepth 1 -name 'algoj-*.sql.gz' 2>/dev/null | sort | tail -n 1 || true)"
+        [ -n "$newest" ] && last="$(stat -c %Y "$newest")"
+    fi
+    if [ -z "$last" ]; then
+        log "성공한 백업 기록이 없다"
+        notify "⚠️ **[algoj] DB 백업 기록 없음** ($(hostname))"$'\n'"성공한 백업이 한 번도 없다. cron 등록과 \`/opt/algoj/backup.log\`를 확인한다."
+        exit 1
+    fi
+    age_hours=$(( ($(date +%s) - last) / 3600 ))
+    last_text="$(date -d "@$last" '+%F %T')"
+    if [ "$age_hours" -ge "$stale_hours" ]; then
+        log "마지막 성공 ${last_text} (${age_hours}시간 전) — 기준 ${stale_hours}시간 초과"
+        notify "⚠️ **[algoj] DB 백업이 ${age_hours}시간째 성공하지 않았다** ($(hostname))"$'\n'"마지막 성공: ${last_text}. cron이 돌고 있는지와 \`/opt/algoj/backup.log\`를 확인한다."
+        exit 1
+    fi
+    log "마지막 성공 ${last_text} (${age_hours}시간 전) — 정상"
+    exit 0
+fi
+
+# ─── 실패 알림 ──────────────────────────────────────────────────
+# fail() 뿐 아니라 set -e 로 예상 못 한 곳에서 죽어도 여기로 온다.
+part=""
+on_exit() {
+    local rc=$?
+    [ -z "$part" ] || rm -f "$part"
+    [ "$rc" -ne 0 ] || return 0
+    local reasons=""
+    if [ "${#FAILS[@]}" -eq 0 ]; then
+        reasons="- 예상하지 못한 오류로 중단됐다 (종료 코드 $rc)"
+    else
+        local r
+        for r in "${FAILS[@]}"; do reasons+="- $r"$'\n'; done
+    fi
+    mkdir -p "$BACKUP_DIR" 2>/dev/null && touch "$ALERT_OPEN" 2>/dev/null || true
+    notify "🚨 **[algoj] DB 백업 실패** ($(hostname), $(date '+%F %T'))"$'\n'"${reasons%$'\n'}"$'\n'"자세한 내용은 \`/opt/algoj/backup.log\`."
+}
+trap on_exit EXIT
+
+# 성공으로 끝날 때 — 마지막 성공 시각을 남기고, 직전에 실패를 알렸다면 복구됐다고 알린다.
+succeed() {
+    touch "$SUCCESS_STAMP"
+    if [ -f "$ALERT_OPEN" ]; then
+        rm -f "$ALERT_OPEN"
+        notify "✅ **[algoj] DB 백업 복구** ($(hostname)) — $1"
+    fi
+    log "완료"
+}
+
+[ -f "$ENV_FILE" ] || fail "$ENV_FILE 가 없다"
 
 DB_NAME="$(env_value DB_NAME)"
 ROOT_PW="$(env_value MYSQL_ROOT_PASSWORD)"
@@ -51,7 +156,6 @@ name="algoj-$(date '+%Y-%m-%dT%H%M').sql.gz"
 final="$BACKUP_DIR/$name"
 # 다 쓰기 전에는 .part 로 둔다 — 중간에 죽은 파일이 정상 백업처럼 보이지 않게.
 part="$final.part"
-trap 'rm -f "$part"' EXIT
 
 log "덤프 시작 ($DB_NAME → $name)"
 # --single-transaction: 테이블을 잠그지 않고 일관된 시점으로 뜬다 (InnoDB).
@@ -74,6 +178,7 @@ case "$last_line" in
 esac
 
 mv "$part" "$final"
+part=""
 chmod 600 "$final"
 log "로컬 저장: $final ($(du -h "$final" | cut -f1))"
 
@@ -167,7 +272,7 @@ RCLONE_REMOTE="$(backup_value BACKUP_RCLONE_REMOTE)"
 S3_BUCKET="$(backup_value BACKUP_S3_BUCKET)"
 if [ -z "$RCLONE_REMOTE" ] && [ -z "$S3_BUCKET" ]; then
     log "$BACKUP_ENV_FILE 에 업로드 대상이 없다 — 박스 밖 업로드는 건너뛴다"
-    log "완료"
+    succeed "로컬 저장만 ($name)"
     exit 0
 fi
 
@@ -176,4 +281,4 @@ if [ -n "$RCLONE_REMOTE" ]; then upload_rclone "$RCLONE_REMOTE" || upload_failed
 if [ -n "$S3_BUCKET" ]; then upload_s3 "$S3_BUCKET" || upload_failed=1; fi
 [ "$upload_failed" -eq 0 ] || fail "업로드 실패 — 로컬 백업($final)은 남아 있다"
 
-log "완료"
+succeed "$name 저장·업로드"
