@@ -42,6 +42,7 @@ out/
 /.claude/*
 !/.claude/settings.json
 !/.claude/rules/
+!/.claude/skills/
 
 ### env files (concrete .env files are local-only, *.example templates are committed) ###
 .env
