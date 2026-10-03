@@ -11,17 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { DifficultyBadge } from "@/components/status-badge";
+import { DIFFICULTY_LABEL, DifficultyBadge } from "@/components/status-badge";
 import type { Difficulty, SolvedFilter } from "@/types/api";
-
-const DIFFICULTY_OPTIONS: { value: Difficulty | ""; label: string }[] = [
-  { value: "", label: "난이도 전체" },
-  { value: "BRONZE", label: "브론즈" },
-  { value: "SILVER", label: "실버" },
-  { value: "GOLD", label: "골드" },
-  { value: "PLATINUM", label: "플래티넘" },
-  { value: "DIAMOND", label: "다이아" },
-];
 
 const SOLVED_OPTIONS: { value: SolvedFilter; label: string }[] = [
   { value: "ALL", label: "상태 전체" },
@@ -89,9 +80,10 @@ export default function ProblemsPage() {
           className={SELECT_CLASS}
           aria-label="난이도 필터"
         >
-          {DIFFICULTY_OPTIONS.map((d) => (
-            <option key={d.value} value={d.value}>
-              {d.label}
+          <option value="">난이도 전체</option>
+          {Object.entries(DIFFICULTY_LABEL).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
             </option>
           ))}
         </select>

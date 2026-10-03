@@ -39,7 +39,7 @@ export function Header() {
           </Link>
           {user?.role === "ADMIN" && (
             <Link
-              href="/admin/problems/new"
+              href="/admin/problems/import"
               className="text-sm text-muted-foreground hover:text-foreground"
             >
               문제 출제

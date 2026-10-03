@@ -1,7 +1,9 @@
 package dev.algoj.global.client;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
@@ -14,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * RestClient's timeout is fixed at build time. Clients are cached per distinct
  * timeout; the configured default is the floor so a caller can never shorten it.
  */
+@Component
 public class Judge0ClientProvider {
 
     private final RestClient.Builder builder;
@@ -23,9 +26,9 @@ public class Judge0ClientProvider {
     private final Map<Integer, RestClient> byReadTimeout = new ConcurrentHashMap<>();
 
     public Judge0ClientProvider(RestClient.Builder builder,
-                                String baseUrl,
-                                int connectTimeoutMs,
-                                int defaultReadTimeoutMs) {
+                                @Value("${judge0.url}") String baseUrl,
+                                @Value("${judge0.connect-timeout-ms}") int connectTimeoutMs,
+                                @Value("${judge0.read-timeout-ms}") int defaultReadTimeoutMs) {
         this.builder = builder;
         this.baseUrl = baseUrl;
         this.connectTimeoutMs = connectTimeoutMs;

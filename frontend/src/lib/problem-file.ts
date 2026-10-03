@@ -8,7 +8,7 @@ import type {
 // ── Single-file problem format ──────────────────────────────────────────────
 //
 // One `.md` file holds the whole problem so admins can author offline and
-// upload it to auto-fill the "문제 출제" form. Layout:
+// upload it on the bulk import page (/admin/problems/import). Layout:
 //
 //   ---
 //   title: 두 수의 합
