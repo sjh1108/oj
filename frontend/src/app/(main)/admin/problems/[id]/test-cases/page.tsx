@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -108,7 +108,6 @@ const emptyDraft = (orderIndex: number): DraftTC => ({
 export default function TestCaseManagementPage() {
   const params = useParams<{ id: string }>();
   const problemId = Number(params.id);
-  const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
 
@@ -129,13 +128,6 @@ export default function TestCaseManagementPage() {
   const [genResult, setGenResult] = useState<GenerateTestCaseResponse | null>(
     null,
   );
-
-  useEffect(() => {
-    if (user && user.role !== "ADMIN") {
-      toast.error("관리자만 접근할 수 있습니다");
-      router.replace("/problems");
-    }
-  }, [user, router]);
 
   const problem = useQuery({
     queryKey: ["problem", problemId],

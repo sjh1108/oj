@@ -68,7 +68,7 @@ export function isPending(s: Pick<SubmissionResponse, "status">) {
   return s.status === "PENDING" || s.status === "JUDGING";
 }
 
-const DIFFICULTY_LABEL: Record<Difficulty, string> = {
+export const DIFFICULTY_LABEL: Record<Difficulty, string> = {
   BRONZE: "브론즈",
   SILVER: "실버",
   GOLD: "골드",

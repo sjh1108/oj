@@ -15,7 +15,6 @@ import {
   UploadIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -292,7 +291,6 @@ async function uploadOne(
 }
 
 export default function ImportProblemsPage() {
-  const router = useRouter();
   const user = useAuthStore((s) => s.user);
   // The batch lives outside the component: an upload started here keeps running
   // (and keeps recording progress) after the admin navigates away, and is still
@@ -310,13 +308,6 @@ export default function ImportProblemsPage() {
   const [dragKey, setDragKey] = useState<number | null>(null);
   const [dropKey, setDropKey] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (user && user.role !== "ADMIN") {
-      toast.error("관리자만 접근할 수 있습니다");
-      router.replace("/problems");
-    }
-  }, [user, router]);
 
   /** Asks the server what each created problem actually holds right now. */
   const refreshServerState = useCallback(async () => {
@@ -561,13 +552,6 @@ export default function ImportProblemsPage() {
             }
           >
             템플릿 다운로드
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            render={<Link href="/admin/problems/new" />}
-          >
-            한 개씩 출제
           </Button>
         </div>
       </div>

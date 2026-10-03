@@ -3,7 +3,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -17,7 +16,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MarkdownEditor } from "@/components/markdown-editor";
-import type { Difficulty } from "@/types/api";
+import { DIFFICULTY_LABEL } from "@/components/status-badge";
 
 const schema = z.object({
   title: z.string().min(1, { error: "제목을 입력하세요" }).max(200),
@@ -33,27 +32,12 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-const DIFFICULTIES: { value: Difficulty; label: string }[] = [
-  { value: "BRONZE", label: "브론즈" },
-  { value: "SILVER", label: "실버" },
-  { value: "GOLD", label: "골드" },
-  { value: "PLATINUM", label: "플래티넘" },
-  { value: "DIAMOND", label: "다이아" },
-];
-
 export default function EditProblemPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
-
-  useEffect(() => {
-    if (user && user.role !== "ADMIN") {
-      toast.error("관리자만 접근할 수 있습니다");
-      router.replace("/problems");
-    }
-  }, [user, router]);
 
   const problem = useQuery({
     queryKey: ["problem", id],
@@ -236,9 +220,9 @@ export default function EditProblemPage() {
                 {...form.register("difficulty")}
                 className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
               >
-                {DIFFICULTIES.map((d) => (
-                  <option key={d.value} value={d.value}>
-                    {d.label}
+                {Object.entries(DIFFICULTY_LABEL).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
                   </option>
                 ))}
               </select>

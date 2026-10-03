@@ -1,8 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 import { ApiError } from "@/lib/api";
@@ -15,18 +14,10 @@ import { Label } from "@/components/ui/label";
 import type { AdminResetPasswordResponse } from "@/types/api";
 
 export default function AdminUsersPage() {
-  const router = useRouter();
   const user = useAuthStore((s) => s.user);
 
   const [usernameOrEmail, setUsernameOrEmail] = useState("");
   const [result, setResult] = useState<AdminResetPasswordResponse | null>(null);
-
-  useEffect(() => {
-    if (user && user.role !== "ADMIN") {
-      toast.error("관리자만 접근할 수 있습니다");
-      router.replace("/problems");
-    }
-  }, [user, router]);
 
   const mutation = useMutation({
     mutationFn: adminApi.resetPassword,
