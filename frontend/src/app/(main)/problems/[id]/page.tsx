@@ -26,6 +26,7 @@ import { runApi } from "@/lib/run-api";
 import { submissionsApi } from "@/lib/submissions-api";
 import { ApiError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import { formatDateTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -1092,13 +1093,22 @@ export default function ProblemDetailPage() {
                   <th className="p-3 w-32">사용자</th>
                   <th className="p-3 w-28">언어</th>
                   <th className="p-3 w-32">시간/메모리</th>
+                  <th className="p-3 w-44">제출 시간</th>
                   <th className="p-3 w-32 text-right">상세</th>
                 </tr>
               </thead>
               <tbody>
                 {solutions.data.content.map((s) => (
                   <tr key={s.id} className="border-t hover:bg-muted/40">
-                    <td className="p-3">{s.username}</td>
+                    <td
+                      className={`p-3 ${
+                        user?.username === s.username
+                          ? "text-green-500 font-medium"
+                          : ""
+                      }`}
+                    >
+                      {s.username}
+                    </td>
                     <td className="p-3 text-xs text-muted-foreground">
                       {s.language}
                     </td>
@@ -1106,6 +1116,9 @@ export default function ProblemDetailPage() {
                       {s.runtime !== null
                         ? `${s.runtime}ms / ${s.memory}KB`
                         : "-"}
+                    </td>
+                    <td className="p-3 text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                      {formatDateTime(s.createdAt)}
                     </td>
                     <td className="p-3 text-right">
                       <Link

@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CodeEditor } from "@/components/code-editor";
 import { StatusBadge, isPending } from "@/components/status-badge";
+import { formatDateTime } from "@/lib/utils";
 
 export default function SubmissionDetailPage() {
   const params = useParams<{ id: string }>();
@@ -111,7 +112,7 @@ export default function SubmissionDetailPage() {
             href={`/problems/${s.problemId}`}
             className="text-sm text-muted-foreground hover:text-foreground"
           >
-            ← {s.problemTitle}
+            ← #{s.problemId} {s.problemTitle}
           </Link>
         </div>
       </div>
@@ -142,6 +143,14 @@ export default function SubmissionDetailPage() {
             <div className="text-muted-foreground">메모리</div>
             <div className="font-medium">
               {s.memory !== null ? `${s.memory}KB` : "-"}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="col-span-2">
+          <CardContent className="p-4">
+            <div className="text-muted-foreground">제출 시간</div>
+            <div className="font-medium tabular-nums">
+              {formatDateTime(s.createdAt)}
             </div>
           </CardContent>
         </Card>

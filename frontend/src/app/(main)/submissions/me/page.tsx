@@ -5,12 +5,15 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { submissionsApi } from "@/lib/submissions-api";
+import { useSolvedProblems } from "@/lib/solved-problems";
+import { formatDateTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { StatusBadge, isPending } from "@/components/status-badge";
 
 export default function MySubmissionsPage() {
   const [page, setPage] = useState(0);
+  const solved = useSolvedProblems();
   const list = useQuery({
     queryKey: ["my-submissions", page],
     queryFn: () => submissionsApi.me(page, 20),
@@ -47,7 +50,15 @@ export default function MySubmissionsPage() {
                 <span className="text-muted-foreground text-sm w-12 shrink-0">
                   #{s.id}
                 </span>
-                <span className="font-medium truncate">{s.problemTitle}</span>
+                <span
+                  className={`font-medium truncate ${
+                    solved.has(s.problemId) || s.status === "ACCEPTED"
+                      ? "text-green-500"
+                      : ""
+                  }`}
+                >
+                  #{s.problemId} {s.problemTitle}
+                </span>
                 <span className="text-xs text-muted-foreground">{s.language}</span>
               </div>
               <div className="flex items-center gap-3 shrink-0">
@@ -60,6 +71,9 @@ export default function MySubmissionsPage() {
                   status={s.status}
                   progress={s.progress}
                 />
+                <span className="hidden sm:inline text-xs text-muted-foreground tabular-nums">
+                  {formatDateTime(s.createdAt)}
+                </span>
               </div>
             </Link>
           ))}
