@@ -4,21 +4,17 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
 
-import { authApi } from "@/lib/auth-api";
 import { submissionsApi } from "@/lib/submissions-api";
 import { useAuthStore } from "@/lib/auth-store";
+import { useSolvedProblems } from "@/lib/solved-problems";
+import { formatDateTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { StatusBadge, isPending } from "@/components/status-badge";
 import type { SubmissionResponse } from "@/types/api";
 
-function useCanView() {
+function useCanView(solved: Set<number>) {
   const user = useAuthStore((s) => s.user);
-  const solved = useQuery({
-    queryKey: ["my-solved-problems"],
-    queryFn: authApi.mySolvedProblems,
-    staleTime: 60_000,
-  });
 
   return (s: SubmissionResponse) => {
     if (!user) return false;
@@ -26,13 +22,14 @@ function useCanView() {
     if (user.role === "ADMIN") return true;
     if (s.status !== "ACCEPTED") return false;
     if (!s.isPublic) return false;
-    return solved.data?.includes(s.problemId) ?? false;
+    return solved.has(s.problemId);
   };
 }
 
 export default function AllSubmissionsPage() {
   const [page, setPage] = useState(0);
-  const canView = useCanView();
+  const solved = useSolvedProblems();
+  const canView = useCanView(solved);
   const me = useAuthStore((s) => s.user);
 
   const list = useQuery({
@@ -72,6 +69,7 @@ export default function AllSubmissionsPage() {
                 <th className="p-3 w-28">언어</th>
                 <th className="p-3 w-32">시간/메모리</th>
                 <th className="p-3 w-32 text-right">상태</th>
+                <th className="p-3 w-44 text-right">제출 시간</th>
               </tr>
             </thead>
             <tbody>
@@ -79,7 +77,7 @@ export default function AllSubmissionsPage() {
                 <tr>
                   <td
                     className="p-6 text-muted-foreground text-center"
-                    colSpan={6}
+                    colSpan={7}
                   >
                     아직 제출 내역이 없습니다
                   </td>
@@ -89,6 +87,11 @@ export default function AllSubmissionsPage() {
                 const viewable = canView(s);
                 // 아이디가 비슷한 사람과 헷갈리지 않게 내 제출만 초록색으로.
                 const isMine = me?.username === s.username;
+                // 내가 맞은 문제도 초록색으로 — 남의 제출에서도. 방금 내 제출이
+                // 정답이 됐으면 solved 목록이 갱신되기 전에도 바로 칠한다.
+                const isSolved =
+                  solved.has(s.problemId) ||
+                  (isMine && s.status === "ACCEPTED");
                 const idCell = viewable ? (
                   <Link
                     href={`/submissions/${s.id}`}
@@ -113,7 +116,7 @@ export default function AllSubmissionsPage() {
                     <td className="p-3">
                       <Link
                         href={`/problems/${s.problemId}`}
-                        className="hover:underline"
+                        className={`hover:underline ${isSolved ? "text-green-500" : ""}`}
                       >
                         #{s.problemId} {s.problemTitle}
                       </Link>
@@ -121,7 +124,7 @@ export default function AllSubmissionsPage() {
                     <td className="p-3 text-xs text-muted-foreground">
                       {s.language}
                     </td>
-                    <td className="p-3 text-xs text-muted-foreground">
+                    <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
                       {s.runtime !== null
                         ? `${s.runtime}ms / ${s.memory}KB`
                         : "-"}
@@ -131,6 +134,9 @@ export default function AllSubmissionsPage() {
                         status={s.status}
                         progress={s.progress}
                       />
+                    </td>
+                    <td className="p-3 text-right text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                      {formatDateTime(s.createdAt)}
                     </td>
                   </tr>
                 );
