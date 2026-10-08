@@ -2,12 +2,14 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { submissionsApi } from "@/lib/submissions-api";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api";
+import { copyToClipboard } from "@/lib/clipboard";
+import { draftKey } from "@/lib/code-draft";
 import {
   downloadTextFile,
   LANGUAGE_EXTENSION,
@@ -15,7 +17,13 @@ import {
 } from "@/lib/download";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { CodeEditor } from "@/components/code-editor";
 import { StatusBadge, isPending } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/utils";
@@ -25,6 +33,7 @@ export default function SubmissionDetailPage() {
   const id = Number(params.id);
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
+  const router = useRouter();
 
   const sub = useQuery({
     queryKey: ["submission", id],
@@ -244,11 +253,20 @@ export default function SubmissionDetailPage() {
             <CardTitle className="text-base">
               {isOwner ? "이 문제를 풀 때 남긴 메모" : `${s.username} 님의 풀이 메모`}
             </CardTitle>
-            {isOwner && s.noteSnapshotPublic && (
-              <Badge variant="outline" className="text-muted-foreground">
-                공개됨
-              </Badge>
-            )}
+            <CardAction className="flex items-center gap-2">
+              {isOwner && s.noteSnapshotPublic && (
+                <Badge variant="outline" className="text-muted-foreground">
+                  공개됨
+                </Badge>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => copyToClipboard(s.noteSnapshot ?? "", "메모")}
+              >
+                메모 복사
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent>
             <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap overflow-auto max-h-64 font-sans">
@@ -264,18 +282,55 @@ export default function SubmissionDetailPage() {
       <Card>
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="text-base">소스 코드</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              downloadTextFile(
-                `${s.problemId}_${sanitizeFilename(s.problemTitle)}.${LANGUAGE_EXTENSION[s.language]}`,
-                s.sourceCode,
-              )
-            }
-          >
-            코드 다운로드
-          </Button>
+          <CardAction className="flex items-center gap-2">
+            {isOwner && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // 문제 화면 에디터의 작성 중 코드 자리에 이 제출 코드를 넣고 이동한다.
+                  const key = draftKey(s.problemId, s.language);
+                  try {
+                    const current = localStorage.getItem(key);
+                    if (
+                      current?.trim() &&
+                      current !== s.sourceCode &&
+                      !confirm(
+                        `문제 화면에 작성 중인 ${s.language} 코드가 있습니다. 이 제출 코드로 바꿀까요?`,
+                      )
+                    )
+                      return;
+                    localStorage.setItem(key, s.sourceCode);
+                  } catch {
+                    toast.error("코드를 불러올 수 없습니다");
+                    return;
+                  }
+                  router.push(`/problems/${s.problemId}?lang=${s.language}`);
+                }}
+              >
+                이 코드로 수정하기
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => copyToClipboard(s.sourceCode, "코드")}
+            >
+              코드 복사
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                downloadTextFile(
+                  `${s.problemId}_${sanitizeFilename(s.problemTitle)}.${LANGUAGE_EXTENSION[s.language]}`,
+                  s.sourceCode,
+                )
+              }
+            >
+              코드 다운로드
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
           <CodeEditor

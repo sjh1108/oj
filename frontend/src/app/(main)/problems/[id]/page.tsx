@@ -26,6 +26,8 @@ import { runApi } from "@/lib/run-api";
 import { submissionsApi } from "@/lib/submissions-api";
 import { ApiError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import { copyToClipboard } from "@/lib/clipboard";
+import { draftKey as problemDraftKey } from "@/lib/code-draft";
 import { formatDateTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -148,7 +150,7 @@ export default function ProblemDetailPage() {
 
   // Per-problem, per-language draft persisted in localStorage so in-progress code
   // survives session drops, refreshes, or accidental navigation.
-  const draftKey = (lang: Language) => `algoj-draft:${id}:${lang}`;
+  const draftKey = (lang: Language) => problemDraftKey(id, lang);
 
   const readDraft = (lang: Language): string | null => {
     if (typeof window === "undefined" || !Number.isFinite(id)) return null;
@@ -170,7 +172,7 @@ export default function ProblemDetailPage() {
     pendingDraft.current = null;
     if (!pending) return;
     if (typeof window === "undefined" || !Number.isFinite(id)) return;
-    const key = `algoj-draft:${id}:${pending.lang}`;
+    const key = problemDraftKey(id, pending.lang);
     // Don't persist the pristine starter template — keep "no draft" meaning no draft.
     if (pending.value === STARTER[pending.lang])
       window.localStorage.removeItem(key);
@@ -181,9 +183,21 @@ export default function ProblemDetailPage() {
   useEffect(() => flushDraft, [flushDraft]);
 
   // Restore the saved draft for the current language when the problem changes.
+  // 제출 화면의 "이 코드로 수정하기"는 그 제출 코드를 draft에 써 두고
+  // ?lang=으로 언어를 넘긴다 — 그 언어로 바꿔 draft를 불러온 뒤 쿼리는 지운다.
   useEffect(() => {
-    const restored = readDraft(language) ?? STARTER[language];
-    if (restored !== code) replaceCode(restored);
+    const url = new URL(window.location.href);
+    const requested = url.searchParams.get("lang");
+    const lang = LANGUAGES.some((l) => l.value === requested)
+      ? (requested as Language)
+      : language;
+    if (requested !== null) {
+      url.searchParams.delete("lang");
+      window.history.replaceState(window.history.state, "", url);
+    }
+    if (lang !== language) setLanguage(lang);
+    const restored = readDraft(lang) ?? STARTER[lang];
+    if (restored !== code || lang !== language) replaceCode(restored);
     // Intentionally keyed on `id` only; language switches are handled inline below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -202,15 +216,6 @@ export default function ProblemDetailPage() {
     flushDraft(); // persist the outgoing language's draft before swapping
     setLanguage(lang);
     replaceCode(readDraft(lang) ?? STARTER[lang]);
-  };
-
-  const copyToClipboard = async (text: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success(`${label} 복사됨`);
-    } catch {
-      toast.error("복사 실패");
-    }
   };
 
   const [sampleResults, setSampleResults] = useState<
@@ -843,6 +848,19 @@ export default function ProblemDetailPage() {
               </Card>
             );
           })}
+          {/* 케이스가 쌓이면 위쪽 버튼까지 다시 올라가야 해서, 목록 끝에도 둔다. */}
+          {customOpen && customCases.length > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={addCustomCase}
+            >
+              <Plus className="size-4 mr-1" />
+              케이스 추가
+            </Button>
+          )}
         </section>
   );
 
@@ -1033,39 +1051,7 @@ export default function ProblemDetailPage() {
         </section>
   );
 
-  return (
-    <main className="max-w-7xl mx-auto p-6 space-y-6">
-      {!isDesktop ? (
-        <div className="space-y-6">
-          {statementSection}
-          {editorSection}
-        </div>
-      ) : statementHidden ? (
-        <div className="max-w-5xl mx-auto">{editorSection}</div>
-      ) : (
-        <PanelGroup
-          direction="horizontal"
-          autoSaveId="algoj-problem-split"
-          className="!overflow-visible"
-        >
-          <Panel
-            defaultSize={50}
-            minSize={25}
-            className="!overflow-visible min-w-0 pr-4"
-          >
-            {statementSection}
-          </Panel>
-          <PanelResizeHandle className="w-1 shrink-0 rounded-full bg-border transition-colors hover:bg-primary/60 data-[resize-handle-state=drag]:bg-primary" />
-          <Panel
-            defaultSize={50}
-            minSize={30}
-            className="!overflow-visible min-w-0 pl-4"
-          >
-            {editorSection}
-          </Panel>
-        </PanelGroup>
-      )}
-
+  const solutionsSection = (
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">다른 사람 풀이</h2>
         {solutionsLocked && (
@@ -1112,7 +1098,7 @@ export default function ProblemDetailPage() {
                     <td className="p-3 text-xs text-muted-foreground">
                       {s.language}
                     </td>
-                    <td className="p-3 text-xs text-muted-foreground">
+                    <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
                       {s.runtime !== null
                         ? `${s.runtime}ms / ${s.memory}KB`
                         : "-"}
@@ -1135,6 +1121,48 @@ export default function ProblemDetailPage() {
           </Card>
         )}
       </section>
+  );
+
+  return (
+    <main className="max-w-7xl mx-auto p-6 space-y-6">
+      {!isDesktop ? (
+        <div className="space-y-6">
+          {statementSection}
+          {editorSection}
+          {solutionsSection}
+        </div>
+      ) : statementHidden ? (
+        <div className="max-w-5xl mx-auto space-y-6">
+          {editorSection}
+          {solutionsSection}
+        </div>
+      ) : (
+        <PanelGroup
+          direction="horizontal"
+          autoSaveId="algoj-problem-split"
+          className="!overflow-visible"
+        >
+          <Panel
+            defaultSize={50}
+            minSize={25}
+            className="!overflow-visible min-w-0 pr-4 space-y-6"
+          >
+            {statementSection}
+            {/* 풀이 목록을 분할 아래에 두면 거기까지 스크롤할 때 오른쪽의
+                고정(sticky) 에디터가 같이 밀려 올라간다 — 왼쪽 열 안에 둔다. */}
+            {solutionsSection}
+          </Panel>
+          <PanelResizeHandle className="w-1 shrink-0 rounded-full bg-border transition-colors hover:bg-primary/60 data-[resize-handle-state=drag]:bg-primary" />
+          <Panel
+            defaultSize={50}
+            minSize={30}
+            className="!overflow-visible min-w-0 pl-4"
+          >
+            {editorSection}
+          </Panel>
+        </PanelGroup>
+      )}
+
     </main>
   );
 }
