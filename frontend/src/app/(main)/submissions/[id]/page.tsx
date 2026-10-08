@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { submissionsApi } from "@/lib/submissions-api";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api";
+import { copyToClipboard } from "@/lib/clipboard";
 import {
   downloadTextFile,
   LANGUAGE_EXTENSION,
@@ -15,7 +16,13 @@ import {
 } from "@/lib/download";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { CodeEditor } from "@/components/code-editor";
 import { StatusBadge, isPending } from "@/components/status-badge";
 import { formatDateTime } from "@/lib/utils";
@@ -244,11 +251,20 @@ export default function SubmissionDetailPage() {
             <CardTitle className="text-base">
               {isOwner ? "이 문제를 풀 때 남긴 메모" : `${s.username} 님의 풀이 메모`}
             </CardTitle>
-            {isOwner && s.noteSnapshotPublic && (
-              <Badge variant="outline" className="text-muted-foreground">
-                공개됨
-              </Badge>
-            )}
+            <CardAction className="flex items-center gap-2">
+              {isOwner && s.noteSnapshotPublic && (
+                <Badge variant="outline" className="text-muted-foreground">
+                  공개됨
+                </Badge>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => copyToClipboard(s.noteSnapshot ?? "", "메모")}
+              >
+                메모 복사
+              </Button>
+            </CardAction>
           </CardHeader>
           <CardContent>
             <pre className="text-sm bg-muted p-3 rounded whitespace-pre-wrap overflow-auto max-h-64 font-sans">
@@ -264,18 +280,27 @@ export default function SubmissionDetailPage() {
       <Card>
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="text-base">소스 코드</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              downloadTextFile(
-                `${s.problemId}_${sanitizeFilename(s.problemTitle)}.${LANGUAGE_EXTENSION[s.language]}`,
-                s.sourceCode,
-              )
-            }
-          >
-            코드 다운로드
-          </Button>
+          <CardAction className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => copyToClipboard(s.sourceCode, "코드")}
+            >
+              코드 복사
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                downloadTextFile(
+                  `${s.problemId}_${sanitizeFilename(s.problemTitle)}.${LANGUAGE_EXTENSION[s.language]}`,
+                  s.sourceCode,
+                )
+              }
+            >
+              코드 다운로드
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent>
           <CodeEditor
