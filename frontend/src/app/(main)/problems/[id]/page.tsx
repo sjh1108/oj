@@ -1085,7 +1085,7 @@ export default function ProblemDetailPage() {
                     <td className="p-3 text-xs text-muted-foreground">
                       {s.language}
                     </td>
-                    <td className="p-3 text-xs text-muted-foreground">
+                    <td className="p-3 text-xs text-muted-foreground whitespace-nowrap">
                       {s.runtime !== null
                         ? `${s.runtime}ms / ${s.memory}KB`
                         : "-"}
