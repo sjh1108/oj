@@ -27,6 +27,7 @@ import { submissionsApi } from "@/lib/submissions-api";
 import { ApiError } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 import { copyToClipboard } from "@/lib/clipboard";
+import { draftKey as problemDraftKey } from "@/lib/code-draft";
 import { formatDateTime } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -149,7 +150,7 @@ export default function ProblemDetailPage() {
 
   // Per-problem, per-language draft persisted in localStorage so in-progress code
   // survives session drops, refreshes, or accidental navigation.
-  const draftKey = (lang: Language) => `algoj-draft:${id}:${lang}`;
+  const draftKey = (lang: Language) => problemDraftKey(id, lang);
 
   const readDraft = (lang: Language): string | null => {
     if (typeof window === "undefined" || !Number.isFinite(id)) return null;
@@ -171,7 +172,7 @@ export default function ProblemDetailPage() {
     pendingDraft.current = null;
     if (!pending) return;
     if (typeof window === "undefined" || !Number.isFinite(id)) return;
-    const key = `algoj-draft:${id}:${pending.lang}`;
+    const key = problemDraftKey(id, pending.lang);
     // Don't persist the pristine starter template — keep "no draft" meaning no draft.
     if (pending.value === STARTER[pending.lang])
       window.localStorage.removeItem(key);
@@ -182,9 +183,21 @@ export default function ProblemDetailPage() {
   useEffect(() => flushDraft, [flushDraft]);
 
   // Restore the saved draft for the current language when the problem changes.
+  // 제출 화면의 "이 코드로 수정하기"는 그 제출 코드를 draft에 써 두고
+  // ?lang=으로 언어를 넘긴다 — 그 언어로 바꿔 draft를 불러온 뒤 쿼리는 지운다.
   useEffect(() => {
-    const restored = readDraft(language) ?? STARTER[language];
-    if (restored !== code) replaceCode(restored);
+    const url = new URL(window.location.href);
+    const requested = url.searchParams.get("lang");
+    const lang = LANGUAGES.some((l) => l.value === requested)
+      ? (requested as Language)
+      : language;
+    if (requested !== null) {
+      url.searchParams.delete("lang");
+      window.history.replaceState(window.history.state, "", url);
+    }
+    if (lang !== language) setLanguage(lang);
+    const restored = readDraft(lang) ?? STARTER[lang];
+    if (restored !== code || lang !== language) replaceCode(restored);
     // Intentionally keyed on `id` only; language switches are handled inline below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);

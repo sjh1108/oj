@@ -2,13 +2,14 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { submissionsApi } from "@/lib/submissions-api";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api";
 import { copyToClipboard } from "@/lib/clipboard";
+import { draftKey } from "@/lib/code-draft";
 import {
   downloadTextFile,
   LANGUAGE_EXTENSION,
@@ -32,6 +33,7 @@ export default function SubmissionDetailPage() {
   const id = Number(params.id);
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
+  const router = useRouter();
 
   const sub = useQuery({
     queryKey: ["submission", id],
@@ -281,6 +283,34 @@ export default function SubmissionDetailPage() {
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="text-base">소스 코드</CardTitle>
           <CardAction className="flex items-center gap-2">
+            {isOwner && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // 문제 화면 에디터의 작성 중 코드 자리에 이 제출 코드를 넣고 이동한다.
+                  const key = draftKey(s.problemId, s.language);
+                  try {
+                    const current = localStorage.getItem(key);
+                    if (
+                      current?.trim() &&
+                      current !== s.sourceCode &&
+                      !confirm(
+                        `문제 화면에 작성 중인 ${s.language} 코드가 있습니다. 이 제출 코드로 바꿀까요?`,
+                      )
+                    )
+                      return;
+                    localStorage.setItem(key, s.sourceCode);
+                  } catch {
+                    toast.error("코드를 불러올 수 없습니다");
+                    return;
+                  }
+                  router.push(`/problems/${s.problemId}?lang=${s.language}`);
+                }}
+              >
+                이 코드로 수정하기
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
