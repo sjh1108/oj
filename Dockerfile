@@ -30,6 +30,8 @@ RUN apt-get update \
 COPY --from=build /app/build/libs/algoj.jar app.jar
 
 EXPOSE 8080
+# 로그·OS 시각도 한국 시간으로. (JVM 시간대는 OjApplication이 Asia/Seoul로 고정한다.)
+ENV TZ=Asia/Seoul
 # Heap is overridable so the deploy can shrink it during the brief blue-green
 # overlap on a memory-tight box. `exec` makes java PID 1 so it receives SIGTERM
 # and shuts down gracefully.

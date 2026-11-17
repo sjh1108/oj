@@ -21,6 +21,9 @@ spring:
     # already at V1 on first boot; only empty databases actually run V1.
     baseline-on-migrate: true
     baseline-version: 1
+    placeholders:
+      # V9: 기존 UTC 시각을 한국 시각으로 옮기는 양. 운영(prod)만 9 — 아래 prod 프로필.
+      kst_shift_hours: 0
 
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
@@ -145,6 +148,11 @@ spring:
   config:
     activate:
       on-profile: prod
+
+  flyway:
+    placeholders:
+      # 운영 API는 V9 이전까지 UTC로 시각을 기록했다 (V9__shift_timestamps_to_kst.sql).
+      kst_shift_hours: 9
 
 logging:
   level:
